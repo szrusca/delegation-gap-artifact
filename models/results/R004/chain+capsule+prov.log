@@ -1,0 +1,4202 @@
+maude tool: 'maude'
+ checking version: 3.5.1. OK.
+ checking installation: OK.
+[Theory AbsChain3] Theory loaded
+[Theory AbsChain3] Theory translated
+[Theory AbsChain3] Theory closed
+[Saturating Sources] Step 1 (Max 5)
+[Saturating Sources] Done
+theory AbsChain3
+
+begin
+
+// Function signature and definition of the equational theory E
+
+functions: fst/1, h/1, pair/2, pk/1, sign/2, snd/1, true/0, verify/3
+equations:
+    fst(<x.1, x.2>) = x.1,
+    snd(<x.1, x.2>) = x.2,
+    verify(sign(x.1, x.2), x.1, pk(x.2)) = true
+
+restriction Equality:
+  "∀ x y #i. (Eq( x, y ) @ #i) ⇒ (x = y)"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ x y #i. (Eq( x, y ) @ #i) ⇒ (x = y)"
+  */
+
+restriction CaveatPermits:
+  "∀ c a #i.
+    (Check( c, a ) @ #i) ⇒
+    ((c = a) ∨ (∃ op x. (a = <op, x>) ∧ (c = <op, 'any'>)))"
+
+  /*
+  expanded formula:
+  "∀ c a #i.
+    (Check( c, a ) @ #i) ⇒
+    ((c = a) ∨ (∃ op x. (a = <op, x>) ∧ (c = <op, 'any'>)))"
+  */
+
+restriction ConcreteOperand:
+  "∀ op #i. (Act( <op, 'any'> ) @ #i) ⇒ (⊥)"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ op #i. (Act( <op, 'any'> ) @ #i) ⇒ (⊥)"
+  */
+
+restriction UniqueKey:
+  "∀ X #i #j. ((Register( X ) @ #i) ∧ (Register( X ) @ #j)) ⇒ (#i = #j)"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ X #i #j. ((Register( X ) @ #i) ∧ (Register( X ) @ #j)) ⇒ (#i = #j)"
+  */
+
+restriction OneValuePerSourceAndTask:
+  "∀ s t v w #i #j.
+    ((Produced( s, t, v ) @ #i) ∧ (Produced( s, t, w ) @ #j)) ⇒ (#i = #j)"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ s t v w #i #j.
+    ((Produced( s, t, v ) @ #i) ∧ (Produced( s, t, w ) @ #j)) ⇒ (#i = #j)"
+  */
+
+rule (modulo E) Register:
+   [ Fr( ~k ) ]
+  --[ Register( $X ) ]->
+   [ !Ltk( $X, ~k ), !Pk( $X, pk(~k) ), Out( pk(~k) ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Human_static_task:
+   [ Fr( ~tid ), !Ltk( $H, kH ) ]
+  --[
+  Intends( $H, ~tid, <'fixed', 'push', $repo> ),
+  RootDelegated( $H, $A1, <'push', 'any'>, ~tid ), TaskStatic( ~tid )
+  ]->
+   [
+   Out( <<'root', $H, $A1, <'push', 'any'>, ~tid>, 
+         sign(<'root', $H, $A1, <'push', 'any'>, ~tid>, kH)>
+   ),
+   Out( <<'cap', $H, ~tid, 'fixed', 'push', $repo>, 
+         sign(<'cap', $H, ~tid, 'fixed', 'push', $repo>, kH)>
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Human_dynamic_task:
+   [ Fr( ~tid ), !Ltk( $H, kH ) ]
+  --[
+  Intends( $H, ~tid, <'hole', 'push', $Src> ),
+  RootDelegated( $H, $A1, <'push', 'any'>, ~tid ), TaskDynamic( ~tid )
+  ]->
+   [
+   Out( <<'root', $H, $A1, <'push', 'any'>, ~tid>, 
+         sign(<'root', $H, $A1, <'push', 'any'>, ~tid>, kH)>
+   ),
+   Out( <<'cap', $H, ~tid, 'hole', 'push', $Src>, 
+         sign(<'cap', $H, ~tid, 'hole', 'push', $Src>, kH)>
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Source_produces:
+   [ In( tid ), !Ltk( $Src, ks ) ]
+  --[ Produced( $Src, tid, $v ) ]->
+   [ Out( <<'prov', $Src, tid, $v>, sign(<'prov', $Src, tid, $v>, ks)> ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Agent1_steered_delegation:
+   [
+   In( <<'root', H, $A1, c1, tid>, s1> ), In( <A2, c2> ), !Pk( H, pkH ),
+   !Ltk( $A1, k1 )
+   ]
+  --[
+  Eq( verify(s1, <'root', H, $A1, c1, tid>, pkH), true ),
+  Delegated( $A1, A2, c2, tid )
+  ]->
+   [
+   Out( <<'del', $A1, A2, c2, h(<<'root', H, $A1, c1, tid>, s1>)>, 
+         sign(<'del', $A1, A2, c2, h(<<'root', H, $A1, c1, tid>, s1>)>, k1)>
+   )
+   ]
+
+  /*
+  rule (modulo AC) Agent1_steered_delegation:
+     [
+     In( <<'root', H, $A1, c1, tid>, s1> ), In( <A2, c2> ), !Pk( H, pkH ),
+     !Ltk( $A1, k1 )
+     ]
+    --[ Eq( z, true ), Delegated( $A1, A2, c2, tid ) ]->
+     [
+     Out( <<'del', $A1, A2, c2, h(<<'root', H, $A1, c1, tid>, s1>)>, 
+           sign(<'del', $A1, A2, c2, h(<<'root', H, $A1, c1, tid>, s1>)>, k1)>
+     )
+     ]
+    variants (modulo AC)
+    1. $A1   = $A1.22
+       H     = H.24
+       c1    = c1.25
+       pkH   = pkH.28
+       s1    = s1.29
+       tid   = tid.30
+       z     = verify(s1.29, <'root', H.24, $A1.22, c1.25, tid.30>, pkH.28)
+    
+    2. $A1   = $A1.32
+       H     = H.34
+       c1    = c1.35
+       pkH   = pk(x.62)
+       s1    = sign(<'root', H.34, $A1.32, c1.35, tid.40>, x.62)
+       tid   = tid.40
+       z     = true
+  */
+
+rule (modulo E) Agent2_steered_delegation:
+   [
+   In( <<'root', H, A1, c1, tid>, s1, 
+        <'del', A1, $A2, c2, h(<<'root', H, A1, c1, tid>, s1>)>, s2>
+   ),
+   In( <A3, c3> ), !Pk( H, pkH ), !Pk( A1, pkA1 ), !Ltk( $A2, k2 )
+   ]
+  --[
+  Eq( verify(s1, <'root', H, A1, c1, tid>, pkH), true ),
+  Eq( verify(s2, <'del', A1, $A2, c2, h(<<'root', H, A1, c1, tid>, s1>)>,
+             pkA1),
+      true
+  ),
+  Delegated( $A2, A3, c3, tid )
+  ]->
+   [
+   Out( <
+         <'del', $A2, A3, c3, 
+          h(<<'root', H, A1, c1, tid>, s1, 
+             <'del', A1, $A2, c2, h(<<'root', H, A1, c1, tid>, s1>)>, s2>)
+         >, 
+         sign(<'del', $A2, A3, c3, 
+               h(<<'root', H, A1, c1, tid>, s1, 
+                  <'del', A1, $A2, c2, h(<<'root', H, A1, c1, tid>, s1>)>, s2>)
+              >,
+              k2)
+        >
+   )
+   ]
+
+  /*
+  rule (modulo AC) Agent2_steered_delegation:
+     [
+     In( <<'root', H, A1, c1, tid>, s1, 
+          <'del', A1, $A2, c2, h(<<'root', H, A1, c1, tid>, s1>)>, s2>
+     ),
+     In( <A3, c3> ), !Pk( H, pkH ), !Pk( A1, pkA1 ), !Ltk( $A2, k2 )
+     ]
+    --[ Eq( z, true ), Eq( z.1, true ), Delegated( $A2, A3, c3, tid ) ]->
+     [
+     Out( <
+           <'del', $A2, A3, c3, 
+            h(<<'root', H, A1, c1, tid>, s1, 
+               <'del', A1, $A2, c2, h(<<'root', H, A1, c1, tid>, s1>)>, s2>)
+           >, 
+           sign(<'del', $A2, A3, c3, 
+                 h(<<'root', H, A1, c1, tid>, s1, 
+                    <'del', A1, $A2, c2, h(<<'root', H, A1, c1, tid>, s1>)>, s2>)
+                >,
+                k2)
+          >
+     )
+     ]
+    variants (modulo AC)
+    1. $A2   = $A2.31
+       A1    = A1.32
+       H     = H.34
+       c1    = c1.35
+       c2    = c2.36
+       pkA1  = pkA1.39
+       pkH   = pkH.40
+       s1    = s1.41
+       s2    = s2.42
+       tid   = tid.43
+       z     = verify(s1.41, <'root', H.34, A1.32, c1.35, tid.43>, pkH.40)
+       z.1   = verify(s2.42,
+                      <'del', A1.32, $A2.31, c2.36, 
+                       h(<<'root', H.34, A1.32, c1.35, tid.43>, s1.41>)>,
+                      pkA1.39)
+    
+    2. $A2   = $A2.44
+       A1    = A1.45
+       H     = H.47
+       c1    = c1.48
+       c2    = c2.49
+       pkA1  = pkA1.52
+       pkH   = pk(x.86)
+       s1    = sign(<'root', H.47, A1.45, c1.48, tid.56>, x.86)
+       s2    = s2.55
+       tid   = tid.56
+       z     = true
+       z.1   = verify(s2.55,
+                      <'del', A1.45, $A2.44, c2.49, 
+                       h(<<'root', H.47, A1.45, c1.48, tid.56>, 
+                          sign(<'root', H.47, A1.45, c1.48, tid.56>, x.86)>)
+                      >,
+                      pkA1.52)
+    
+    3. $A2   = $A2.44
+       A1    = A1.45
+       H     = H.47
+       c1    = c1.48
+       c2    = c2.49
+       pkA1  = pk(x.86)
+       pkH   = pkH.53
+       s1    = s1.54
+       s2    = sign(<'del', A1.45, $A2.44, c2.49, 
+                     h(<<'root', H.47, A1.45, c1.48, tid.56>, s1.54>)>,
+                    x.86)
+       tid   = tid.56
+       z     = verify(s1.54, <'root', H.47, A1.45, c1.48, tid.56>, pkH.53)
+       z.1   = true
+    
+    4. $A2   = $A2.45
+       A1    = A1.46
+       H     = H.48
+       c1    = c1.49
+       c2    = c2.50
+       pkA1  = pk(x.87)
+       pkH   = pk(x.88)
+       s1    = sign(<'root', H.48, A1.46, c1.49, tid.57>, x.88)
+       s2    = sign(<'del', A1.46, $A2.45, c2.50, 
+                     h(<<'root', H.48, A1.46, c1.49, tid.57>, 
+                        sign(<'root', H.48, A1.46, c1.49, tid.57>, x.88)>)
+                    >,
+                    x.87)
+       tid   = tid.57
+       z     = true
+       z.1   = true
+  */
+
+rule (modulo E) Agent3_steered_request:
+   [
+   In( <<'root', H, A1, c1, tid>, s1, 
+        <'del', A1, A2, c2, h(<<'root', H, A1, c1, tid>, s1>)>, s2, 
+        <'del', A2, $A3, c3, 
+         h(<<'root', H, A1, c1, tid>, s1, 
+            <'del', A1, A2, c2, h(<<'root', H, A1, c1, tid>, s1>)>, s2>)
+        >, 
+        s3>
+   ),
+   In( <$R, a> ), !Pk( H, pkH ), !Pk( A1, pkA1 ), !Pk( A2, pkA2 ),
+   !Ltk( $A3, k3 )
+   ]
+  --[
+  Eq( verify(s1, <'root', H, A1, c1, tid>, pkH), true ),
+  Eq( verify(s2, <'del', A1, A2, c2, h(<<'root', H, A1, c1, tid>, s1>)>,
+             pkA1),
+      true
+  ),
+  Eq( verify(s3,
+             <'del', A2, $A3, c3, 
+              h(<<'root', H, A1, c1, tid>, s1, 
+                 <'del', A1, A2, c2, h(<<'root', H, A1, c1, tid>, s1>)>, s2>)
+             >,
+             pkA2),
+      true
+  ),
+  Request( $A3, a, tid )
+  ]->
+   [
+   Out( <'req', a, <'root', H, A1, c1, tid>, s1, 
+         <'del', A1, A2, c2, h(<<'root', H, A1, c1, tid>, s1>)>, s2, 
+         <'del', A2, $A3, c3, 
+          h(<<'root', H, A1, c1, tid>, s1, 
+             <'del', A1, A2, c2, h(<<'root', H, A1, c1, tid>, s1>)>, s2>)
+         >, 
+         s3, 
+         sign(<'req', a, $R, 
+               h(<<'root', H, A1, c1, tid>, s1, 
+                  <'del', A1, A2, c2, h(<<'root', H, A1, c1, tid>, s1>)>, s2, 
+                  <'del', A2, $A3, c3, 
+                   h(<<'root', H, A1, c1, tid>, s1, 
+                      <'del', A1, A2, c2, h(<<'root', H, A1, c1, tid>, s1>)>, s2>)
+                  >, 
+                  s3>)
+              >,
+              k3)
+        >
+   )
+   ]
+
+  /*
+  rule (modulo AC) Agent3_steered_request:
+     [
+     In( <<'root', H, A1, c1, tid>, s1, 
+          <'del', A1, A2, c2, h(<<'root', H, A1, c1, tid>, s1>)>, s2, 
+          <'del', A2, $A3, c3, 
+           h(<<'root', H, A1, c1, tid>, s1, 
+              <'del', A1, A2, c2, h(<<'root', H, A1, c1, tid>, s1>)>, s2>)
+          >, 
+          s3>
+     ),
+     In( <$R, a> ), !Pk( H, pkH ), !Pk( A1, pkA1 ), !Pk( A2, pkA2 ),
+     !Ltk( $A3, k3 )
+     ]
+    --[
+    Eq( z, true ), Eq( z.1, true ), Eq( z.2, true ), Request( $A3, a, tid )
+    ]->
+     [
+     Out( <'req', a, <'root', H, A1, c1, tid>, s1, 
+           <'del', A1, A2, c2, h(<<'root', H, A1, c1, tid>, s1>)>, s2, 
+           <'del', A2, $A3, c3, 
+            h(<<'root', H, A1, c1, tid>, s1, 
+               <'del', A1, A2, c2, h(<<'root', H, A1, c1, tid>, s1>)>, s2>)
+           >, 
+           s3, 
+           sign(<'req', a, $R, 
+                 h(<<'root', H, A1, c1, tid>, s1, 
+                    <'del', A1, A2, c2, h(<<'root', H, A1, c1, tid>, s1>)>, s2, 
+                    <'del', A2, $A3, c3, 
+                     h(<<'root', H, A1, c1, tid>, s1, 
+                        <'del', A1, A2, c2, h(<<'root', H, A1, c1, tid>, s1>)>, s2>)
+                    >, 
+                    s3>)
+                >,
+                k3)
+          >
+     )
+     ]
+    variants (modulo AC)
+    1. $A3   = $A3.41
+       A1    = A1.43
+       A2    = A2.44
+       H     = H.45
+       c1    = c1.47
+       c2    = c2.48
+       c3    = c3.49
+       pkA1  = pkA1.51
+       pkA2  = pkA2.52
+       pkH   = pkH.53
+       s1    = s1.54
+       s2    = s2.55
+       s3    = s3.56
+       tid   = tid.57
+       z     = verify(s1.54, <'root', H.45, A1.43, c1.47, tid.57>, pkH.53)
+       z.1   = verify(s2.55,
+                      <'del', A1.43, A2.44, c2.48, 
+                       h(<<'root', H.45, A1.43, c1.47, tid.57>, s1.54>)>,
+                      pkA1.51)
+       z.2   = verify(s3.56,
+                      <'del', A2.44, $A3.41, c3.49, 
+                       h(<<'root', H.45, A1.43, c1.47, tid.57>, s1.54, 
+                          <'del', A1.43, A2.44, c2.48, 
+                           h(<<'root', H.45, A1.43, c1.47, tid.57>, s1.54>)>, 
+                          s2.55>)
+                      >,
+                      pkA2.52)
+    
+    2. $A3   = $A3.79
+       A1    = A1.81
+       A2    = A2.82
+       H     = H.83
+       c1    = c1.85
+       c2    = c2.86
+       c3    = c3.87
+       pkA1  = pk(x.156)
+       pkA2  = pkA2.90
+       pkH   = pkH.91
+       s1    = s1.92
+       s2    = sign(<'del', A1.81, A2.82, c2.86, 
+                     h(<<'root', H.83, A1.81, c1.85, tid.95>, s1.92>)>,
+                    x.156)
+       s3    = s3.94
+       tid   = tid.95
+       z     = verify(s1.92, <'root', H.83, A1.81, c1.85, tid.95>, pkH.91)
+       z.1   = true
+       z.2   = verify(s3.94,
+                      <'del', A2.82, $A3.79, c3.87, 
+                       h(<<'root', H.83, A1.81, c1.85, tid.95>, s1.92, 
+                          <'del', A1.81, A2.82, c2.86, 
+                           h(<<'root', H.83, A1.81, c1.85, tid.95>, s1.92>)>, 
+                          sign(<'del', A1.81, A2.82, c2.86, 
+                                h(<<'root', H.83, A1.81, c1.85, tid.95>, s1.92>)>,
+                               x.156)
+                         >)
+                      >,
+                      pkA2.90)
+    
+    3. $A3   = $A3.81
+       A1    = A1.83
+       A2    = A2.84
+       H     = H.85
+       c1    = c1.87
+       c2    = c2.88
+       c3    = c3.89
+       pkA1  = pkA1.91
+       pkA2  = pkA2.92
+       pkH   = pk(x.160)
+       s1    = sign(<'root', H.85, A1.83, c1.87, tid.97>, x.160)
+       s2    = s2.95
+       s3    = s3.96
+       tid   = tid.97
+       z     = true
+       z.1   = verify(s2.95,
+                      <'del', A1.83, A2.84, c2.88, 
+                       h(<<'root', H.85, A1.83, c1.87, tid.97>, 
+                          sign(<'root', H.85, A1.83, c1.87, tid.97>, x.160)>)
+                      >,
+                      pkA1.91)
+       z.2   = verify(s3.96,
+                      <'del', A2.84, $A3.81, c3.89, 
+                       h(<<'root', H.85, A1.83, c1.87, tid.97>, 
+                          sign(<'root', H.85, A1.83, c1.87, tid.97>, x.160), 
+                          <'del', A1.83, A2.84, c2.88, 
+                           h(<<'root', H.85, A1.83, c1.87, tid.97>, 
+                              sign(<'root', H.85, A1.83, c1.87, tid.97>, x.160)>)
+                          >, 
+                          s2.95>)
+                      >,
+                      pkA2.92)
+    
+    4. $A3   = $A3.81
+       A1    = A1.83
+       A2    = A2.84
+       H     = H.85
+       c1    = c1.87
+       c2    = c2.88
+       c3    = c3.89
+       pkA1  = pk(x.158)
+       pkA2  = pkA2.92
+       pkH   = pk(x.160)
+       s1    = sign(<'root', H.85, A1.83, c1.87, tid.97>, x.160)
+       s2    = sign(<'del', A1.83, A2.84, c2.88, 
+                     h(<<'root', H.85, A1.83, c1.87, tid.97>, 
+                        sign(<'root', H.85, A1.83, c1.87, tid.97>, x.160)>)
+                    >,
+                    x.158)
+       s3    = s3.96
+       tid   = tid.97
+       z     = true
+       z.1   = true
+       z.2   = verify(s3.96,
+                      <'del', A2.84, $A3.81, c3.89, 
+                       h(<<'root', H.85, A1.83, c1.87, tid.97>, 
+                          sign(<'root', H.85, A1.83, c1.87, tid.97>, x.160), 
+                          <'del', A1.83, A2.84, c2.88, 
+                           h(<<'root', H.85, A1.83, c1.87, tid.97>, 
+                              sign(<'root', H.85, A1.83, c1.87, tid.97>, x.160)>)
+                          >, 
+                          sign(<'del', A1.83, A2.84, c2.88, 
+                                h(<<'root', H.85, A1.83, c1.87, tid.97>, 
+                                   sign(<'root', H.85, A1.83, c1.87, tid.97>, x.160)>)
+                               >,
+                               x.158)
+                         >)
+                      >,
+                      pkA2.92)
+    
+    5. $A3   = $A3.82
+       A1    = A1.84
+       A2    = A2.85
+       H     = H.86
+       c1    = c1.88
+       c2    = c2.89
+       c3    = c3.90
+       pkA1  = pkA1.92
+       pkA2  = pk(x.162)
+       pkH   = pkH.94
+       s1    = s1.95
+       s2    = s2.96
+       s3    = sign(<'del', A2.85, $A3.82, c3.90, 
+                     h(<<'root', H.86, A1.84, c1.88, tid.98>, s1.95, 
+                        <'del', A1.84, A2.85, c2.89, 
+                         h(<<'root', H.86, A1.84, c1.88, tid.98>, s1.95>)>, 
+                        s2.96>)
+                    >,
+                    x.162)
+       tid   = tid.98
+       z     = verify(s1.95, <'root', H.86, A1.84, c1.88, tid.98>, pkH.94)
+       z.1   = verify(s2.96,
+                      <'del', A1.84, A2.85, c2.89, 
+                       h(<<'root', H.86, A1.84, c1.88, tid.98>, s1.95>)>,
+                      pkA1.92)
+       z.2   = true
+    
+    6. $A3   = $A3.82
+       A1    = A1.84
+       A2    = A2.85
+       H     = H.86
+       c1    = c1.88
+       c2    = c2.89
+       c3    = c3.90
+       pkA1  = pk(x.161)
+       pkA2  = pk(x.162)
+       pkH   = pkH.94
+       s1    = s1.95
+       s2    = sign(<'del', A1.84, A2.85, c2.89, 
+                     h(<<'root', H.86, A1.84, c1.88, tid.98>, s1.95>)>,
+                    x.161)
+       s3    = sign(<'del', A2.85, $A3.82, c3.90, 
+                     h(<<'root', H.86, A1.84, c1.88, tid.98>, s1.95, 
+                        <'del', A1.84, A2.85, c2.89, 
+                         h(<<'root', H.86, A1.84, c1.88, tid.98>, s1.95>)>, 
+                        sign(<'del', A1.84, A2.85, c2.89, 
+                              h(<<'root', H.86, A1.84, c1.88, tid.98>, s1.95>)>,
+                             x.161)
+                       >)
+                    >,
+                    x.162)
+       tid   = tid.98
+       z     = verify(s1.95, <'root', H.86, A1.84, c1.88, tid.98>, pkH.94)
+       z.1   = true
+       z.2   = true
+    
+    7. $A3   = $A3.83
+       A1    = A1.85
+       A2    = A2.86
+       H     = H.87
+       c1    = c1.89
+       c2    = c2.90
+       c3    = c3.91
+       pkA1  = pkA1.93
+       pkA2  = pk(x.163)
+       pkH   = pk(x.164)
+       s1    = sign(<'root', H.87, A1.85, c1.89, tid.99>, x.164)
+       s2    = s2.97
+       s3    = sign(<'del', A2.86, $A3.83, c3.91, 
+                     h(<<'root', H.87, A1.85, c1.89, tid.99>, 
+                        sign(<'root', H.87, A1.85, c1.89, tid.99>, x.164), 
+                        <'del', A1.85, A2.86, c2.90, 
+                         h(<<'root', H.87, A1.85, c1.89, tid.99>, 
+                            sign(<'root', H.87, A1.85, c1.89, tid.99>, x.164)>)
+                        >, 
+                        s2.97>)
+                    >,
+                    x.163)
+       tid   = tid.99
+       z     = true
+       z.1   = verify(s2.97,
+                      <'del', A1.85, A2.86, c2.90, 
+                       h(<<'root', H.87, A1.85, c1.89, tid.99>, 
+                          sign(<'root', H.87, A1.85, c1.89, tid.99>, x.164)>)
+                      >,
+                      pkA1.93)
+       z.2   = true
+    
+    8. $A3   = $A3.83
+       A1    = A1.85
+       A2    = A2.86
+       H     = H.87
+       c1    = c1.89
+       c2    = c2.90
+       c3    = c3.91
+       pkA1  = pk(x.162)
+       pkA2  = pk(x.163)
+       pkH   = pk(x.164)
+       s1    = sign(<'root', H.87, A1.85, c1.89, tid.99>, x.164)
+       s2    = sign(<'del', A1.85, A2.86, c2.90, 
+                     h(<<'root', H.87, A1.85, c1.89, tid.99>, 
+                        sign(<'root', H.87, A1.85, c1.89, tid.99>, x.164)>)
+                    >,
+                    x.162)
+       s3    = sign(<'del', A2.86, $A3.83, c3.91, 
+                     h(<<'root', H.87, A1.85, c1.89, tid.99>, 
+                        sign(<'root', H.87, A1.85, c1.89, tid.99>, x.164), 
+                        <'del', A1.85, A2.86, c2.90, 
+                         h(<<'root', H.87, A1.85, c1.89, tid.99>, 
+                            sign(<'root', H.87, A1.85, c1.89, tid.99>, x.164)>)
+                        >, 
+                        sign(<'del', A1.85, A2.86, c2.90, 
+                              h(<<'root', H.87, A1.85, c1.89, tid.99>, 
+                                 sign(<'root', H.87, A1.85, c1.89, tid.99>, x.164)>)
+                             >,
+                             x.162)
+                       >)
+                    >,
+                    x.163)
+       tid   = tid.99
+       z     = true
+       z.1   = true
+       z.2   = true
+  */
+
+rule (modulo E) Resource_receive_bearer:
+   [
+   In( <'req', a, <'root', H, A1, c1, tid>, s1, 
+        <'del', A1, A2, c2, h(<<'root', H, A1, c1, tid>, s1>)>, s2, 
+        <'del', A2, A3, c3, 
+         h(<<'root', H, A1, c1, tid>, s1, 
+            <'del', A1, A2, c2, h(<<'root', H, A1, c1, tid>, s1>)>, s2>)
+        >, 
+        s3, sr>
+   ),
+   !Pk( H, pkH ), !Pk( A1, pkA1 ), !Pk( A2, pkA2 )
+   ]
+  --[
+  Eq( verify(s1, <'root', H, A1, c1, tid>, pkH), true ),
+  Eq( verify(s2, <'del', A1, A2, c2, h(<<'root', H, A1, c1, tid>, s1>)>,
+             pkA1),
+      true
+  ),
+  Eq( verify(s3,
+             <'del', A2, A3, c3, 
+              h(<<'root', H, A1, c1, tid>, s1, 
+                 <'del', A1, A2, c2, h(<<'root', H, A1, c1, tid>, s1>)>, s2>)
+             >,
+             pkA2),
+      true
+  ),
+  Check( c1, a ), Check( c2, a ), Check( c3, a ), Act( a )
+  ]->
+   [ Received( $R, A3, a, H, A1, c1, A2, c2, c3, tid ) ]
+
+  /*
+  rule (modulo AC) Resource_receive_bearer:
+     [
+     In( <'req', a, <'root', H, A1, c1, tid>, s1, 
+          <'del', A1, A2, c2, h(<<'root', H, A1, c1, tid>, s1>)>, s2, 
+          <'del', A2, A3, c3, 
+           h(<<'root', H, A1, c1, tid>, s1, 
+              <'del', A1, A2, c2, h(<<'root', H, A1, c1, tid>, s1>)>, s2>)
+          >, 
+          s3, sr>
+     ),
+     !Pk( H, pkH ), !Pk( A1, pkA1 ), !Pk( A2, pkA2 )
+     ]
+    --[
+    Eq( z, true ), Eq( z.1, true ), Eq( z.2, true ), Check( c1, a ),
+    Check( c2, a ), Check( c3, a ), Act( a )
+    ]->
+     [ Received( $R, A3, a, H, A1, c1, A2, c2, c3, tid ) ]
+    variants (modulo AC)
+    1. A1    = A1.40
+       A2    = A2.41
+       A3    = A3.42
+       H     = H.43
+       c1    = c1.45
+       c2    = c2.46
+       c3    = c3.47
+       pkA1  = pkA1.48
+       pkA2  = pkA2.49
+       pkH   = pkH.50
+       s1    = s1.51
+       s2    = s2.52
+       s3    = s3.53
+       tid   = tid.55
+       z     = verify(s1.51, <'root', H.43, A1.40, c1.45, tid.55>, pkH.50)
+       z.1   = verify(s2.52,
+                      <'del', A1.40, A2.41, c2.46, 
+                       h(<<'root', H.43, A1.40, c1.45, tid.55>, s1.51>)>,
+                      pkA1.48)
+       z.2   = verify(s3.53,
+                      <'del', A2.41, A3.42, c3.47, 
+                       h(<<'root', H.43, A1.40, c1.45, tid.55>, s1.51, 
+                          <'del', A1.40, A2.41, c2.46, 
+                           h(<<'root', H.43, A1.40, c1.45, tid.55>, s1.51>)>, 
+                          s2.52>)
+                      >,
+                      pkA2.49)
+    
+    2. A1    = A1.77
+       A2    = A2.78
+       A3    = A3.79
+       H     = H.80
+       c1    = c1.82
+       c2    = c2.83
+       c3    = c3.84
+       pkA1  = pk(x.151)
+       pkA2  = pkA2.86
+       pkH   = pkH.87
+       s1    = s1.88
+       s2    = sign(<'del', A1.77, A2.78, c2.83, 
+                     h(<<'root', H.80, A1.77, c1.82, tid.92>, s1.88>)>,
+                    x.151)
+       s3    = s3.90
+       tid   = tid.92
+       z     = verify(s1.88, <'root', H.80, A1.77, c1.82, tid.92>, pkH.87)
+       z.1   = true
+       z.2   = verify(s3.90,
+                      <'del', A2.78, A3.79, c3.84, 
+                       h(<<'root', H.80, A1.77, c1.82, tid.92>, s1.88, 
+                          <'del', A1.77, A2.78, c2.83, 
+                           h(<<'root', H.80, A1.77, c1.82, tid.92>, s1.88>)>, 
+                          sign(<'del', A1.77, A2.78, c2.83, 
+                                h(<<'root', H.80, A1.77, c1.82, tid.92>, s1.88>)>,
+                               x.151)
+                         >)
+                      >,
+                      pkA2.86)
+    
+    3. A1    = A1.78
+       A2    = A2.79
+       A3    = A3.80
+       H     = H.81
+       c1    = c1.83
+       c2    = c2.84
+       c3    = c3.85
+       pkA1  = pkA1.86
+       pkA2  = pk(x.153)
+       pkH   = pkH.88
+       s1    = s1.89
+       s2    = s2.90
+       s3    = sign(<'del', A2.79, A3.80, c3.85, 
+                     h(<<'root', H.81, A1.78, c1.83, tid.93>, s1.89, 
+                        <'del', A1.78, A2.79, c2.84, 
+                         h(<<'root', H.81, A1.78, c1.83, tid.93>, s1.89>)>, 
+                        s2.90>)
+                    >,
+                    x.153)
+       tid   = tid.93
+       z     = verify(s1.89, <'root', H.81, A1.78, c1.83, tid.93>, pkH.88)
+       z.1   = verify(s2.90,
+                      <'del', A1.78, A2.79, c2.84, 
+                       h(<<'root', H.81, A1.78, c1.83, tid.93>, s1.89>)>,
+                      pkA1.86)
+       z.2   = true
+    
+    4. A1    = A1.78
+       A2    = A2.79
+       A3    = A3.80
+       H     = H.81
+       c1    = c1.83
+       c2    = c2.84
+       c3    = c3.85
+       pkA1  = pk(x.152)
+       pkA2  = pk(x.153)
+       pkH   = pkH.88
+       s1    = s1.89
+       s2    = sign(<'del', A1.78, A2.79, c2.84, 
+                     h(<<'root', H.81, A1.78, c1.83, tid.93>, s1.89>)>,
+                    x.152)
+       s3    = sign(<'del', A2.79, A3.80, c3.85, 
+                     h(<<'root', H.81, A1.78, c1.83, tid.93>, s1.89, 
+                        <'del', A1.78, A2.79, c2.84, 
+                         h(<<'root', H.81, A1.78, c1.83, tid.93>, s1.89>)>, 
+                        sign(<'del', A1.78, A2.79, c2.84, 
+                              h(<<'root', H.81, A1.78, c1.83, tid.93>, s1.89>)>,
+                             x.152)
+                       >)
+                    >,
+                    x.153)
+       tid   = tid.93
+       z     = verify(s1.89, <'root', H.81, A1.78, c1.83, tid.93>, pkH.88)
+       z.1   = true
+       z.2   = true
+    
+    5. A1    = A1.79
+       A2    = A2.80
+       A3    = A3.81
+       H     = H.82
+       c1    = c1.84
+       c2    = c2.85
+       c3    = c3.86
+       pkA1  = pkA1.87
+       pkA2  = pkA2.88
+       pkH   = pk(x.155)
+       s1    = sign(<'root', H.82, A1.79, c1.84, tid.94>, x.155)
+       s2    = s2.91
+       s3    = s3.92
+       tid   = tid.94
+       z     = true
+       z.1   = verify(s2.91,
+                      <'del', A1.79, A2.80, c2.85, 
+                       h(<<'root', H.82, A1.79, c1.84, tid.94>, 
+                          sign(<'root', H.82, A1.79, c1.84, tid.94>, x.155)>)
+                      >,
+                      pkA1.87)
+       z.2   = verify(s3.92,
+                      <'del', A2.80, A3.81, c3.86, 
+                       h(<<'root', H.82, A1.79, c1.84, tid.94>, 
+                          sign(<'root', H.82, A1.79, c1.84, tid.94>, x.155), 
+                          <'del', A1.79, A2.80, c2.85, 
+                           h(<<'root', H.82, A1.79, c1.84, tid.94>, 
+                              sign(<'root', H.82, A1.79, c1.84, tid.94>, x.155)>)
+                          >, 
+                          s2.91>)
+                      >,
+                      pkA2.88)
+    
+    6. A1    = A1.79
+       A2    = A2.80
+       A3    = A3.81
+       H     = H.82
+       c1    = c1.84
+       c2    = c2.85
+       c3    = c3.86
+       pkA1  = pkA1.87
+       pkA2  = pk(x.154)
+       pkH   = pk(x.155)
+       s1    = sign(<'root', H.82, A1.79, c1.84, tid.94>, x.155)
+       s2    = s2.91
+       s3    = sign(<'del', A2.80, A3.81, c3.86, 
+                     h(<<'root', H.82, A1.79, c1.84, tid.94>, 
+                        sign(<'root', H.82, A1.79, c1.84, tid.94>, x.155), 
+                        <'del', A1.79, A2.80, c2.85, 
+                         h(<<'root', H.82, A1.79, c1.84, tid.94>, 
+                            sign(<'root', H.82, A1.79, c1.84, tid.94>, x.155)>)
+                        >, 
+                        s2.91>)
+                    >,
+                    x.154)
+       tid   = tid.94
+       z     = true
+       z.1   = verify(s2.91,
+                      <'del', A1.79, A2.80, c2.85, 
+                       h(<<'root', H.82, A1.79, c1.84, tid.94>, 
+                          sign(<'root', H.82, A1.79, c1.84, tid.94>, x.155)>)
+                      >,
+                      pkA1.87)
+       z.2   = true
+    
+    7. A1    = A1.79
+       A2    = A2.80
+       A3    = A3.81
+       H     = H.82
+       c1    = c1.84
+       c2    = c2.85
+       c3    = c3.86
+       pkA1  = pk(x.153)
+       pkA2  = pkA2.88
+       pkH   = pk(x.155)
+       s1    = sign(<'root', H.82, A1.79, c1.84, tid.94>, x.155)
+       s2    = sign(<'del', A1.79, A2.80, c2.85, 
+                     h(<<'root', H.82, A1.79, c1.84, tid.94>, 
+                        sign(<'root', H.82, A1.79, c1.84, tid.94>, x.155)>)
+                    >,
+                    x.153)
+       s3    = s3.92
+       tid   = tid.94
+       z     = true
+       z.1   = true
+       z.2   = verify(s3.92,
+                      <'del', A2.80, A3.81, c3.86, 
+                       h(<<'root', H.82, A1.79, c1.84, tid.94>, 
+                          sign(<'root', H.82, A1.79, c1.84, tid.94>, x.155), 
+                          <'del', A1.79, A2.80, c2.85, 
+                           h(<<'root', H.82, A1.79, c1.84, tid.94>, 
+                              sign(<'root', H.82, A1.79, c1.84, tid.94>, x.155)>)
+                          >, 
+                          sign(<'del', A1.79, A2.80, c2.85, 
+                                h(<<'root', H.82, A1.79, c1.84, tid.94>, 
+                                   sign(<'root', H.82, A1.79, c1.84, tid.94>, x.155)>)
+                               >,
+                               x.153)
+                         >)
+                      >,
+                      pkA2.88)
+    
+    8. A1    = A1.79
+       A2    = A2.80
+       A3    = A3.81
+       H     = H.82
+       c1    = c1.84
+       c2    = c2.85
+       c3    = c3.86
+       pkA1  = pk(x.153)
+       pkA2  = pk(x.154)
+       pkH   = pk(x.155)
+       s1    = sign(<'root', H.82, A1.79, c1.84, tid.94>, x.155)
+       s2    = sign(<'del', A1.79, A2.80, c2.85, 
+                     h(<<'root', H.82, A1.79, c1.84, tid.94>, 
+                        sign(<'root', H.82, A1.79, c1.84, tid.94>, x.155)>)
+                    >,
+                    x.153)
+       s3    = sign(<'del', A2.80, A3.81, c3.86, 
+                     h(<<'root', H.82, A1.79, c1.84, tid.94>, 
+                        sign(<'root', H.82, A1.79, c1.84, tid.94>, x.155), 
+                        <'del', A1.79, A2.80, c2.85, 
+                         h(<<'root', H.82, A1.79, c1.84, tid.94>, 
+                            sign(<'root', H.82, A1.79, c1.84, tid.94>, x.155)>)
+                        >, 
+                        sign(<'del', A1.79, A2.80, c2.85, 
+                              h(<<'root', H.82, A1.79, c1.84, tid.94>, 
+                                 sign(<'root', H.82, A1.79, c1.84, tid.94>, x.155)>)
+                             >,
+                             x.153)
+                       >)
+                    >,
+                    x.154)
+       tid   = tid.94
+       z     = true
+       z.1   = true
+       z.2   = true
+  */
+
+rule (modulo E) Resource_accept_capsule_fixed:
+   [
+   Received( R, P, <op, v>, H, A1, c1, A2, c2, c3, tid ),
+   In( <<'cap', H, tid, 'fixed', op, v>, sc> ), !Pk( H, pkH )
+   ]
+  --[
+  Eq( verify(sc, <'cap', H, tid, 'fixed', op, v>, pkH), true ),
+  Accept( R, P, <op, v>, tid ), Chain( R, H, A1, c1, A2, c2, P, c3, tid )
+  ]->
+   [ ]
+
+  /*
+  rule (modulo AC) Resource_accept_capsule_fixed:
+     [
+     Received( R, P, <op, v>, H, A1, c1, A2, c2, c3, tid ),
+     In( <<'cap', H, tid, 'fixed', op, v>, sc> ), !Pk( H, pkH )
+     ]
+    --[
+    Eq( z, true ), Accept( R, P, <op, v>, tid ),
+    Chain( R, H, A1, c1, A2, c2, P, c3, tid )
+    ]->
+     [ ]
+    variants (modulo AC)
+    1. H     = H.28
+       op    = op.34
+       pkH   = pkH.35
+       sc    = sc.36
+       tid   = tid.37
+       v     = v.38
+       z     = verify(sc.36, <'cap', H.28, tid.37, 'fixed', op.34, v.38>,
+                      pkH.35)
+    
+    2. H     = H.39
+       op    = op.45
+       pkH   = pk(x.74)
+       sc    = sign(<'cap', H.39, tid.48, 'fixed', op.45, v.49>, x.74)
+       tid   = tid.48
+       v     = v.49
+       z     = true
+  */
+
+rule (modulo E) Resource_accept_capsule_hole_provenance:
+   [
+   Received( R, P, <op, v>, H, A1, c1, A2, c2, c3, tid ),
+   In( <<'cap', H, tid, 'hole', op, S>, sc> ),
+   In( <<'prov', S, tid, v>, sp> ), !Pk( H, pkH ), !Pk( S, pkS )
+   ]
+  --[
+  Eq( verify(sc, <'cap', H, tid, 'hole', op, S>, pkH), true ),
+  Eq( verify(sp, <'prov', S, tid, v>, pkS), true ), ProvFrom( S, tid, v ),
+  Accept( R, P, <op, v>, tid ), Chain( R, H, A1, c1, A2, c2, P, c3, tid )
+  ]->
+   [ ]
+
+  /*
+  rule (modulo AC) Resource_accept_capsule_hole_provenance:
+     [
+     Received( R, P, <op, v>, H, A1, c1, A2, c2, c3, tid ),
+     In( <<'cap', H, tid, 'hole', op, S>, sc> ),
+     In( <<'prov', S, tid, v>, sp> ), !Pk( H, pkH ), !Pk( S, pkS )
+     ]
+    --[
+    Eq( z, true ), Eq( z.1, true ), ProvFrom( S, tid, v ),
+    Accept( R, P, <op, v>, tid ), Chain( R, H, A1, c1, A2, c2, P, c3, tid )
+    ]->
+     [ ]
+    variants (modulo AC)
+    1. H     = H.36
+       S     = S.39
+       op    = op.43
+       pkH   = pkH.44
+       pkS   = pkS.45
+       sc    = sc.46
+       sp    = sp.47
+       tid   = tid.48
+       v     = v.49
+       z     = verify(sc.46, <'cap', H.36, tid.48, 'hole', op.43, S.39>, pkH.44)
+       z.1   = verify(sp.47, <'prov', S.39, tid.48, v.49>, pkS.45)
+    
+    2. H     = H.67
+       S     = S.70
+       op    = op.74
+       pkH   = pkH.75
+       pkS   = pk(x.130)
+       sc    = sc.77
+       sp    = sign(<'prov', S.70, tid.79, v.80>, x.130)
+       tid   = tid.79
+       v     = v.80
+       z     = verify(sc.77, <'cap', H.67, tid.79, 'hole', op.74, S.70>, pkH.75)
+       z.1   = true
+    
+    3. H     = H.69
+       S     = S.72
+       op    = op.76
+       pkH   = pk(x.134)
+       pkS   = pkS.78
+       sc    = sign(<'cap', H.69, tid.81, 'hole', op.76, S.72>, x.134)
+       sp    = sp.80
+       tid   = tid.81
+       v     = v.82
+       z     = true
+       z.1   = verify(sp.80, <'prov', S.72, tid.81, v.82>, pkS.78)
+    
+    4. H     = H.70
+       S     = S.73
+       op    = op.77
+       pkH   = pk(x.135)
+       pkS   = pk(x.136)
+       sc    = sign(<'cap', H.70, tid.82, 'hole', op.77, S.73>, x.135)
+       sp    = sign(<'prov', S.73, tid.82, v.83>, x.136)
+       tid   = tid.82
+       v     = v.83
+       z     = true
+       z.1   = true
+  */
+
+lemma executable_static_task_conformant:
+  exists-trace
+  "∃ R a tid H A1 c1 A2 c2 A3 c3 #i #c #j #k.
+    ((((((Accept( R, A3, a, tid ) @ #i) ∧
+         (Chain( R, H, A1, c1, A2, c2, A3, c3, tid ) @ #c)) ∧
+        (TaskStatic( tid ) @ #j)) ∧
+       (Intends( H, tid, <'fixed', a> ) @ #k)) ∧
+      (¬(A1 = A2))) ∧
+     (¬(A2 = A3))) ∧
+    (¬(A1 = A3))"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ R a tid H A1 c1 A2 c2 A3 c3 #i #c #j #k.
+  (Accept( R, A3, a, tid ) @ #i) ∧
+  (Chain( R, H, A1, c1, A2, c2, A3, c3, tid ) @ #c) ∧
+  (TaskStatic( tid ) @ #j) ∧
+  (Intends( H, tid, <'fixed', a> ) @ #k)
+ ∧
+  (¬(A1 = A2)) ∧ (¬(A2 = A3)) ∧ (¬(A1 = A3))"
+*/
+simplify
+solve( !Ltk( $H, kH ) ▶₁ #j )
+  case Register
+  solve( Accept( R, A3, a, ~tid ) @ #i )
+    case Resource_accept_capsule_fixed
+    solve( Received( R, A3, <op, v>, H, A1, c1, A2, c2, c3, ~tid ) ▶₀ #i )
+      case Resource_receive_bearer
+      solve( (c1 = <op, v>)  ∥
+             (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c1 = <op.1, 'any'>)) )
+        case case_2
+        solve( (c2 = <op, v>)  ∥
+               (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c2 = <op.1, 'any'>)) )
+          case case_1
+          solve( (c3 = <op, v>)  ∥
+                 (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c3 = <op.1, 'any'>)) )
+            case case_1
+            solve( !Pk( $X, pk(x) ) ▶₂ #i )
+              case Register
+              solve( Chain( $R, H.1, A1.1, c1, A2, c2, A3, c3, ~tid ) @ #c )
+                case Resource_accept_capsule_fixed
+                solve( Received( $R, A3, <op, v>, H, A1, c1, A2, c2, c3, ~tid ) ▶₀ #c )
+                  case Resource_receive_bearer
+                  solve( (c1 = <op, v>)  ∥
+                         (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c1 = <op.1, 'any'>)) )
+                    case case_2
+                    solve( (c2 = <op, v>)  ∥
+                           (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c2 = <op.1, 'any'>)) )
+                      case case_1
+                      solve( (c3 = <op, v>)  ∥
+                             (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c3 = <op.1, 'any'>)) )
+                        case case_1
+                        solve( !Pk( $X, pk(x) ) ▶₂ #c )
+                          case Register
+                          solve( Intends( $X, ~tid, <'fixed', op.1, v.1> ) @ #k.8 )
+                            case Human_static_task
+                            solve( !KU( sign(<'cap', $X.2, ~tid, 'fixed', 'push', $repo>, ~k.1)
+                                   ) @ #vk.43 )
+                              case Human_static_task
+                              solve( !KU( sign(<'root', $H, $X.2, <'push', 'any'>, ~tid>, ~k)
+                                     ) @ #vk.48 )
+                                case Human_static_task
+                                solve( !KU( sign(<'del', $A1, $X.2, <'push', $repo>, 
+                                                  h(<<'root', $H, $A1, <'push', 'any'>, ~tid>, 
+                                                     sign(<'root', $H, $A1, <'push', 'any'>, ~tid>, ~k)>)
+                                                 >,
+                                                 ~k.1)
+                                       ) @ #vk.58 )
+                                  case Agent1_steered_delegation
+                                  solve( !KU( sign(<'del', $X.2, A3, <'push', $repo>, 
+                                                    h(<<'root', $H, $A1, <'push', 'any'>, ~tid>, 
+                                                       sign(<'root', $H, $A1, <'push', 'any'>, ~tid>, ~k), 
+                                                       <'del', $A1, $X.2, <'push', $repo>, 
+                                                        h(<<'root', $H, $A1, <'push', 'any'>, ~tid>, 
+                                                           sign(<'root', $H, $A1, <'push', 'any'>, ~tid>, ~k)
+                                                          >)
+                                                       >, 
+                                                       sign(<'del', $A1, $X.2, <'push', $repo>, 
+                                                             h(<<'root', $H, $A1, <'push', 'any'>, ~tid>, 
+                                                                sign(<'root', $H, $A1, <'push', 'any'>, ~tid>,
+                                                                     ~k)
+                                                               >)
+                                                            >,
+                                                            ~k.1)
+                                                      >)
+                                                   >,
+                                                   ~k.2)
+                                         ) @ #vk.66 )
+                                    case Agent2_steered_delegation
+                                    solve( !KU( sign(<'cap', $H, ~tid, 'fixed', op, v>, ~k) ) @ #vk.81 )
+                                      case Human_static_task
+                                      solve( !KU( sign(<'root', $H, $X, <'push', 'any'>, ~tid>, ~k)
+                                             ) @ #vk.72 )
+                                        case Human_static_task
+                                        solve( !KU( sign(<'del', $A1, $X, <'push', $repo>, 
+                                                          h(<<'root', $H, $A1, <'push', 'any'>, ~tid>, 
+                                                             sign(<'root', $H, $A1, <'push', 'any'>, ~tid>,
+                                                                  ~k)
+                                                            >)
+                                                         >,
+                                                         ~k.1)
+                                               ) @ #vk.68 )
+                                          case Agent1_steered_delegation
+                                          solve( !KU( sign(<'del', $X, A3, <'push', $repo>, 
+                                                            h(<<'root', $H, $A1, <'push', 'any'>, ~tid>, 
+                                                               sign(<'root', $H, $A1, <'push', 'any'>, ~tid>,
+                                                                    ~k), 
+                                                               <'del', $A1, $X, <'push', $repo>, 
+                                                                h(<<'root', $H, $A1, <'push', 'any'>, ~tid>, 
+                                                                   sign(<'root', $H, $A1, <'push', 'any'>, 
+                                                                         ~tid>,
+                                                                        ~k)
+                                                                  >)
+                                                               >, 
+                                                               sign(<'del', $A1, $X, <'push', $repo>, 
+                                                                     h(<
+                                                                        <'root', $H, $A1, <'push', 'any'>, 
+                                                                         ~tid>, 
+                                                                        sign(<'root', $H, $A1, 
+                                                                              <'push', 'any'>, ~tid>,
+                                                                             ~k)
+                                                                       >)
+                                                                    >,
+                                                                    ~k.1)
+                                                              >)
+                                                           >,
+                                                           ~k.3)
+                                                 ) @ #vk.72 )
+                                            case Agent2_steered_delegation
+                                            solve( !KU( ~tid ) @ #vk.34 )
+                                              case Human_static_task_case_1
+                                              solve( !KU( h(<<'root', $H, $A1, <'push', 'any'>, ~tid>, 
+                                                             sign(<'root', $H, $A1, <'push', 'any'>, ~tid>,
+                                                                  ~k)
+                                                            >)
+                                                     ) @ #vk.69 )
+                                                case Agent1_steered_delegation
+                                                solve( !KU( h(<<'root', $H, $A1, <'push', 'any'>, ~tid>, 
+                                                               sign(<'root', $H, $A1, <'push', 'any'>, ~tid>,
+                                                                    ~k), 
+                                                               <'del', $A1, $X.1, <'push', $repo>, 
+                                                                h(<<'root', $H, $A1, <'push', 'any'>, ~tid>, 
+                                                                   sign(<'root', $H, $A1, <'push', 'any'>, 
+                                                                         ~tid>,
+                                                                        ~k)
+                                                                  >)
+                                                               >, 
+                                                               sign(<'del', $A1, $X.1, <'push', $repo>, 
+                                                                     h(<
+                                                                        <'root', $H, $A1, <'push', 'any'>, 
+                                                                         ~tid>, 
+                                                                        sign(<'root', $H, $A1, 
+                                                                              <'push', 'any'>, ~tid>,
+                                                                             ~k)
+                                                                       >)
+                                                                    >,
+                                                                    ~k.1)
+                                                              >)
+                                                       ) @ #vk.71 )
+                                                  case Agent2_steered_delegation
+                                                  solve( !KU( h(<<'root', $H, $A1, <'push', 'any'>, ~tid>, 
+                                                                 sign(<'root', $H, $A1, <'push', 'any'>, ~tid
+                                                                      >,
+                                                                      ~k), 
+                                                                 <'del', $A1, $X, <'push', $repo>, 
+                                                                  h(<
+                                                                     <'root', $H, $A1, <'push', 'any'>, ~tid
+                                                                     >, 
+                                                                     sign(<'root', $H, $A1, <'push', 'any'>, 
+                                                                           ~tid>,
+                                                                          ~k)
+                                                                    >)
+                                                                 >, 
+                                                                 sign(<'del', $A1, $X, <'push', $repo>, 
+                                                                       h(<
+                                                                          <'root', $H, $A1, <'push', 'any'>, 
+                                                                           ~tid>, 
+                                                                          sign(<'root', $H, $A1, 
+                                                                                <'push', 'any'>, ~tid>,
+                                                                               ~k)
+                                                                         >)
+                                                                      >,
+                                                                      ~k.1)
+                                                                >)
+                                                         ) @ #vk.75 )
+                                                    case Agent2_steered_delegation
+                                                    SOLVED // trace found
+                                                  qed
+                                                qed
+                                              qed
+                                            qed
+                                          qed
+                                        qed
+                                      qed
+                                    qed
+                                  qed
+                                qed
+                              qed
+                            qed
+                          qed
+                        qed
+                      qed
+                    qed
+                  qed
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma executable_dynamic_task_conformant:
+  exists-trace
+  "∃ R op v tid H S A1 c1 A2 c2 A3 c3 #i #c #j #k.
+    ((((((Accept( R, A3, <op, v>, tid ) @ #i) ∧
+         (Chain( R, H, A1, c1, A2, c2, A3, c3, tid ) @ #c)) ∧
+        (Intends( H, tid, <'hole', op, S> ) @ #j)) ∧
+       (Produced( S, tid, v ) @ #k)) ∧
+      (¬(A1 = A2))) ∧
+     (¬(A2 = A3))) ∧
+    (¬(A1 = A3))"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ R op v tid H S A1 c1 A2 c2 A3 c3 #i #c #j #k.
+  (Accept( R, A3, <op, v>, tid ) @ #i) ∧
+  (Chain( R, H, A1, c1, A2, c2, A3, c3, tid ) @ #c) ∧
+  (Intends( H, tid, <'hole', op, S> ) @ #j) ∧
+  (Produced( S, tid, v ) @ #k)
+ ∧
+  (¬(A1 = A2)) ∧ (¬(A2 = A3)) ∧ (¬(A1 = A3))"
+*/
+simplify
+solve( !Ltk( $Src, ks ) ▶₁ #k )
+  case Register
+  solve( Accept( R, A3, <op, $v>, tid ) @ #i )
+    case Resource_accept_capsule_hole_provenance
+    solve( Received( R, A3, <op, $v>, H, A1, c1, A2, c2, c3, tid ) ▶₀ #i )
+      case Resource_receive_bearer
+      solve( (c1 = <op, $v>)  ∥
+             (∃ op.1 x. (<op, $v> = <op.1, x>) ∧ (c1 = <op.1, 'any'>)) )
+        case case_2
+        solve( (c2 = <op, $v>)  ∥
+               (∃ op.1 x. (<op, $v> = <op.1, x>) ∧ (c2 = <op.1, 'any'>)) )
+          case case_1
+          solve( (c3 = <op, $v>)  ∥
+                 (∃ op.1 x. (<op, $v> = <op.1, x>) ∧ (c3 = <op.1, 'any'>)) )
+            case case_1
+            solve( !Pk( $X, pk(x) ) ▶₃ #i )
+              case Register
+              solve( !Pk( S, pk(x) ) ▶₄ #i )
+                case Register
+                solve( Chain( $R, H, A1, c1, A2, c2, A3, c3, tid ) @ #c )
+                  case Resource_accept_capsule_hole_provenance
+                  solve( Received( $R, A3, <op, v>, H, A1, c1, A2, c2, c3, tid ) ▶₀ #c )
+                    case Resource_receive_bearer
+                    solve( (c1 = <op, v>)  ∥
+                           (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c1 = <op.1, 'any'>)) )
+                      case case_2
+                      solve( (c2 = <op, v>)  ∥
+                             (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c2 = <op.1, 'any'>)) )
+                        case case_1
+                        solve( (c3 = <op, v>)  ∥
+                               (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c3 = <op.1, 'any'>)) )
+                          case case_1
+                          solve( !Pk( $X, pk(x) ) ▶₃ #c )
+                            case Register
+                            solve( !Pk( S, pk(x) ) ▶₄ #c )
+                              case Register
+                              solve( Intends( $X, tid, <'hole', op.1, $Src> ) @ #j )
+                                case Human_dynamic_task
+                                solve( !Ltk( $X, kH ) ▶₁ #j )
+                                  case Register
+                                  solve( !KU( sign(<'cap', $X.4, ~tid, 'hole', 'push', $X.7>, ~k.2)
+                                         ) @ #vk.53 )
+                                    case Human_dynamic_task
+                                    solve( !KU( sign(<'root', $X, $X.4, <'push', 'any'>, ~tid>, ~k)
+                                           ) @ #vk.60 )
+                                      case Human_dynamic_task
+                                      solve( !KU( sign(<'del', $A1, $X.4, <'push', $v.1>, 
+                                                        h(<<'root', $X, $A1, <'push', 'any'>, ~tid>, 
+                                                           sign(<'root', $X, $A1, <'push', 'any'>, ~tid>, ~k)
+                                                          >)
+                                                       >,
+                                                       ~k.3)
+                                             ) @ #vk.70 )
+                                        case Agent1_steered_delegation
+                                        solve( !KU( sign(<'del', $X.4, A3, <'push', $v.1>, 
+                                                          h(<<'root', $X, $A1, <'push', 'any'>, ~tid>, 
+                                                             sign(<'root', $X, $A1, <'push', 'any'>, ~tid>,
+                                                                  ~k), 
+                                                             <'del', $A1, $X.4, <'push', $v.1>, 
+                                                              h(<<'root', $X, $A1, <'push', 'any'>, ~tid>, 
+                                                                 sign(<'root', $X, $A1, <'push', 'any'>, ~tid
+                                                                      >,
+                                                                      ~k)
+                                                                >)
+                                                             >, 
+                                                             sign(<'del', $A1, $X.4, <'push', $v.1>, 
+                                                                   h(<
+                                                                      <'root', $X, $A1, <'push', 'any'>, ~tid
+                                                                      >, 
+                                                                      sign(<'root', $X, $A1, <'push', 'any'>, 
+                                                                            ~tid>,
+                                                                           ~k)
+                                                                     >)
+                                                                  >,
+                                                                  ~k.3)
+                                                            >)
+                                                         >,
+                                                         ~k.4)
+                                               ) @ #vk.78 )
+                                          case Agent2_steered_delegation
+                                          solve( !KU( sign(<'cap', $X, ~tid, 'hole', op, $X.3>, ~k)
+                                                 ) @ #vk.94 )
+                                            case Human_dynamic_task
+                                            solve( !KU( sign(<'prov', $Src, ~tid, v>, ~k.1) ) @ #vk.85 )
+                                              case Source_produces
+                                              solve( !KU( sign(<'root', $X, $X.1, <'push', 'any'>, ~tid>, ~k)
+                                                     ) @ #vk.80 )
+                                                case Human_dynamic_task
+                                                solve( !KU( sign(<'del', $A1, $X.1, <'push', $v>, 
+                                                                  h(<
+                                                                     <'root', $X, $A1, <'push', 'any'>, ~tid
+                                                                     >, 
+                                                                     sign(<'root', $X, $A1, <'push', 'any'>, 
+                                                                           ~tid>,
+                                                                          ~k)
+                                                                    >)
+                                                                 >,
+                                                                 ~k.2)
+                                                       ) @ #vk.76 )
+                                                  case Agent1_steered_delegation
+                                                  solve( !KU( sign(<'del', $X.1, A3, <'push', $v>, 
+                                                                    h(<
+                                                                       <'root', $X, $A1, <'push', 'any'>, ~tid
+                                                                       >, 
+                                                                       sign(<'root', $X, $A1, 
+                                                                             <'push', 'any'>, ~tid>,
+                                                                            ~k), 
+                                                                       <'del', $A1, $X.1, <'push', $v>, 
+                                                                        h(<
+                                                                           <'root', $X, $A1, <'push', 'any'>, 
+                                                                            ~tid>, 
+                                                                           sign(<'root', $X, $A1, 
+                                                                                 <'push', 'any'>, ~tid>,
+                                                                                ~k)
+                                                                          >)
+                                                                       >, 
+                                                                       sign(<'del', $A1, $X.1, <'push', $v>, 
+                                                                             h(<
+                                                                                <'root', $X, $A1, 
+                                                                                 <'push', 'any'>, ~tid>, 
+                                                                                sign(<'root', $X, $A1, 
+                                                                                      <'push', 'any'>, ~tid>,
+                                                                                     ~k)
+                                                                               >)
+                                                                            >,
+                                                                            ~k.2)
+                                                                      >)
+                                                                   >,
+                                                                   ~k.5)
+                                                         ) @ #vk.80 )
+                                                    case Agent2_steered_delegation
+                                                    solve( !KU( ~tid ) @ #vk.27 )
+                                                      case Human_dynamic_task_case_1
+                                                      solve( !KU( h(<
+                                                                     <'root', $X, $A1, <'push', 'any'>, ~tid
+                                                                     >, 
+                                                                     sign(<'root', $X, $A1, <'push', 'any'>, 
+                                                                           ~tid>,
+                                                                          ~k)
+                                                                    >)
+                                                             ) @ #vk.77 )
+                                                        case Agent1_steered_delegation
+                                                        solve( !KU( h(<
+                                                                       <'root', $X, $A1, <'push', 'any'>, ~tid
+                                                                       >, 
+                                                                       sign(<'root', $X, $A1, 
+                                                                             <'push', 'any'>, ~tid>,
+                                                                            ~k), 
+                                                                       <'del', $A1, $X.2, <'push', $v>, 
+                                                                        h(<
+                                                                           <'root', $X, $A1, <'push', 'any'>, 
+                                                                            ~tid>, 
+                                                                           sign(<'root', $X, $A1, 
+                                                                                 <'push', 'any'>, ~tid>,
+                                                                                ~k)
+                                                                          >)
+                                                                       >, 
+                                                                       sign(<'del', $A1, $X.2, <'push', $v>, 
+                                                                             h(<
+                                                                                <'root', $X, $A1, 
+                                                                                 <'push', 'any'>, ~tid>, 
+                                                                                sign(<'root', $X, $A1, 
+                                                                                      <'push', 'any'>, ~tid>,
+                                                                                     ~k)
+                                                                               >)
+                                                                            >,
+                                                                            ~k.2)
+                                                                      >)
+                                                               ) @ #vk.79 )
+                                                          case Agent2_steered_delegation
+                                                          solve( !KU( h(<
+                                                                         <'root', $X, $A1, <'push', 'any'>, 
+                                                                          ~tid>, 
+                                                                         sign(<'root', $X, $A1, 
+                                                                               <'push', 'any'>, ~tid>,
+                                                                              ~k), 
+                                                                         <'del', $A1, $X.1, <'push', $v>, 
+                                                                          h(<
+                                                                             <'root', $X, $A1, 
+                                                                              <'push', 'any'>, ~tid>, 
+                                                                             sign(<'root', $X, $A1, 
+                                                                                   <'push', 'any'>, ~tid>,
+                                                                                  ~k)
+                                                                            >)
+                                                                         >, 
+                                                                         sign(<'del', $A1, $X.1, 
+                                                                               <'push', $v>, 
+                                                                               h(<
+                                                                                  <'root', $X, $A1, 
+                                                                                   <'push', 'any'>, ~tid>, 
+                                                                                  sign(<'root', $X, $A1, 
+                                                                                        <'push', 'any'>, ~tid
+                                                                                       >,
+                                                                                       ~k)
+                                                                                 >)
+                                                                              >,
+                                                                              ~k.2)
+                                                                        >)
+                                                                 ) @ #vk.83 )
+                                                            case Agent2_steered_delegation
+                                                            SOLVED // trace found
+                                                          qed
+                                                        qed
+                                                      qed
+                                                    qed
+                                                  qed
+                                                qed
+                                              qed
+                                            qed
+                                          qed
+                                        qed
+                                      qed
+                                    qed
+                                  qed
+                                qed
+                              qed
+                            qed
+                          qed
+                        qed
+                      qed
+                    qed
+                  qed
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma AUTH_every_hop_was_delegated:
+  all-traces
+  "∀ R H A1 c1 A2 c2 A3 c3 tid #i.
+    (Chain( R, H, A1, c1, A2, c2, A3, c3, tid ) @ #i) ⇒
+    (((∃ #j. (RootDelegated( H, A1, c1, tid ) @ #j) ∧ (#j < #i)) ∧
+      (∃ #k. (Delegated( A1, A2, c2, tid ) @ #k) ∧ (#k < #i))) ∧
+     (∃ #l. (Delegated( A2, A3, c3, tid ) @ #l) ∧ (#l < #i)))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ R H A1 c1 A2 c2 A3 c3 tid #i.
+  (Chain( R, H, A1, c1, A2, c2, A3, c3, tid ) @ #i)
+ ∧
+  ((∀ #j. (RootDelegated( H, A1, c1, tid ) @ #j) ⇒ ¬(#j < #i)) ∨
+   (∀ #k. (Delegated( A1, A2, c2, tid ) @ #k) ⇒ ¬(#k < #i)) ∨
+   (∀ #l. (Delegated( A2, A3, c3, tid ) @ #l) ⇒ ¬(#l < #i)))"
+*/
+simplify
+solve( (∀ #j. (RootDelegated( H, A1, c1, tid ) @ #j) ⇒ ¬(#j < #i))  ∥
+       (∀ #k. (Delegated( A1, A2, c2, tid ) @ #k) ⇒ ¬(#k < #i))  ∥
+       (∀ #l. (Delegated( A2, A3, c3, tid ) @ #l) ⇒ ¬(#l < #i)) )
+  case case_1
+  solve( Chain( R, H, A1, c1, A2, c2, A3, c3, tid ) @ #i )
+    case Resource_accept_capsule_fixed
+    solve( Received( R, A3, <op, v>, H, A1, c1, A2, c2, c3, tid ) ▶₀ #i )
+      case Resource_receive_bearer
+      solve( (c1 = <op, v>)  ∥
+             (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c1 = <op.1, 'any'>)) )
+        case case_1
+        solve( (c2 = <op, v>)  ∥
+               (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c2 = <op.1, 'any'>)) )
+          case case_1
+          solve( (c3 = <op, v>)  ∥
+                 (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c3 = <op.1, 'any'>)) )
+            case case_1
+            solve( !Pk( $X, pk(x) ) ▶₂ #i )
+              case Register
+              solve( !KU( sign(<'cap', $X, tid, 'fixed', op, v>, ~k) ) @ #vk.24 )
+                case Human_static_task
+                solve( !KU( sign(<'root', $X, $X.1, <'push', $repo>, ~tid>, ~k)
+                       ) @ #vk.32 )
+                  case Human_static_task
+                  by contradiction /* from formulas */
+                next
+                  case c_sign
+                  by solve( !KU( ~k ) @ #vk.45 )
+                qed
+              next
+                case c_sign
+                by solve( !KU( ~k ) @ #vk.45 )
+              qed
+            qed
+          next
+            case case_2
+            solve( !Pk( $X, pk(x) ) ▶₂ #i )
+              case Register
+              solve( !KU( sign(<'cap', $X, tid, 'fixed', op, v>, ~k) ) @ #vk.24 )
+                case Human_static_task
+                solve( !KU( sign(<'root', $X, $X.1, <'push', $repo>, ~tid>, ~k)
+                       ) @ #vk.32 )
+                  case Human_static_task
+                  by contradiction /* from formulas */
+                next
+                  case c_sign
+                  by solve( !KU( ~k ) @ #vk.47 )
+                qed
+              next
+                case c_sign
+                by solve( !KU( ~k ) @ #vk.47 )
+              qed
+            qed
+          qed
+        next
+          case case_2
+          solve( (c3 = <op, v>)  ∥
+                 (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c3 = <op.1, 'any'>)) )
+            case case_1
+            solve( !Pk( $X, pk(x) ) ▶₂ #i )
+              case Register
+              solve( !KU( sign(<'cap', $X, tid, 'fixed', op, v>, ~k) ) @ #vk.24 )
+                case Human_static_task
+                solve( !KU( sign(<'root', $X, $X.1, <'push', $repo>, ~tid>, ~k)
+                       ) @ #vk.33 )
+                  case Human_static_task
+                  by contradiction /* from formulas */
+                next
+                  case c_sign
+                  by solve( !KU( ~k ) @ #vk.47 )
+                qed
+              next
+                case c_sign
+                by solve( !KU( ~k ) @ #vk.47 )
+              qed
+            qed
+          next
+            case case_2
+            solve( !Pk( $X, pk(x) ) ▶₂ #i )
+              case Register
+              solve( !KU( sign(<'cap', $X, tid, 'fixed', op, v>, ~k) ) @ #vk.24 )
+                case Human_static_task
+                solve( !KU( sign(<'root', $X, $X.1, <'push', $repo>, ~tid>, ~k)
+                       ) @ #vk.33 )
+                  case Human_static_task
+                  by contradiction /* from formulas */
+                next
+                  case c_sign
+                  by solve( !KU( ~k ) @ #vk.47 )
+                qed
+              next
+                case c_sign
+                by solve( !KU( ~k ) @ #vk.47 )
+              qed
+            qed
+          qed
+        qed
+      next
+        case case_2
+        solve( (c2 = <op, v>)  ∥
+               (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c2 = <op.1, 'any'>)) )
+          case case_1
+          solve( (c3 = <op, v>)  ∥
+                 (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c3 = <op.1, 'any'>)) )
+            case case_1
+            solve( !Pk( $X, pk(x) ) ▶₂ #i )
+              case Register
+              solve( !KU( sign(<'cap', $X, tid, 'fixed', op, v>, ~k) ) @ #vk.25 )
+                case Human_static_task
+                solve( !KU( sign(<'root', $X, $X.1, <'push', 'any'>, ~tid>, ~k)
+                       ) @ #vk.33 )
+                  case Human_static_task
+                  by contradiction /* from formulas */
+                next
+                  case c_sign
+                  by solve( !KU( ~k ) @ #vk.47 )
+                qed
+              next
+                case c_sign
+                by solve( !KU( ~k ) @ #vk.47 )
+              qed
+            qed
+          next
+            case case_2
+            solve( !Pk( $X, pk(x) ) ▶₂ #i )
+              case Register
+              solve( !KU( sign(<'cap', $X, tid, 'fixed', op, v>, ~k) ) @ #vk.25 )
+                case Human_static_task
+                solve( !KU( sign(<'root', $X, $X.1, <'push', 'any'>, ~tid>, ~k)
+                       ) @ #vk.33 )
+                  case Human_static_task
+                  by contradiction /* from formulas */
+                next
+                  case c_sign
+                  by solve( !KU( ~k ) @ #vk.47 )
+                qed
+              next
+                case c_sign
+                by solve( !KU( ~k ) @ #vk.47 )
+              qed
+            qed
+          qed
+        next
+          case case_2
+          solve( (c3 = <op, v>)  ∥
+                 (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c3 = <op.1, 'any'>)) )
+            case case_1
+            solve( !Pk( $X, pk(x) ) ▶₂ #i )
+              case Register
+              solve( !KU( sign(<'cap', $X, tid, 'fixed', op, v>, ~k) ) @ #vk.25 )
+                case Human_static_task
+                solve( !KU( sign(<'root', $X, $X.1, <'push', 'any'>, ~tid>, ~k)
+                       ) @ #vk.33 )
+                  case Human_static_task
+                  by contradiction /* from formulas */
+                next
+                  case c_sign
+                  by solve( !KU( ~k ) @ #vk.47 )
+                qed
+              next
+                case c_sign
+                by solve( !KU( ~k ) @ #vk.47 )
+              qed
+            qed
+          next
+            case case_2
+            solve( !Pk( $X, pk(x) ) ▶₂ #i )
+              case Register
+              solve( !KU( sign(<'cap', $X, tid, 'fixed', op, v>, ~k) ) @ #vk.25 )
+                case Human_static_task
+                solve( !KU( sign(<'root', $X, $X.1, <'push', 'any'>, ~tid>, ~k)
+                       ) @ #vk.33 )
+                  case Human_static_task
+                  by contradiction /* from formulas */
+                next
+                  case c_sign
+                  by solve( !KU( ~k ) @ #vk.47 )
+                qed
+              next
+                case c_sign
+                by solve( !KU( ~k ) @ #vk.47 )
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  next
+    case Resource_accept_capsule_hole_provenance
+    solve( Received( R, A3, <op, v>, H, A1, c1, A2, c2, c3, tid ) ▶₀ #i )
+      case Resource_receive_bearer
+      solve( (c1 = <op, v>)  ∥
+             (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c1 = <op.1, 'any'>)) )
+        case case_1
+        solve( (c2 = <op, v>)  ∥
+               (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c2 = <op.1, 'any'>)) )
+          case case_1
+          solve( (c3 = <op, v>)  ∥
+                 (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c3 = <op.1, 'any'>)) )
+            case case_1
+            solve( !Pk( $X, pk(x) ) ▶₃ #i )
+              case Register
+              solve( !Pk( S, pk(x) ) ▶₄ #i )
+                case Register
+                solve( !KU( sign(<'cap', $X, tid, 'hole', op, $X.3>, ~k) ) @ #vk.31 )
+                  case Human_dynamic_task
+                  solve( !KU( sign(<'prov', $X.3, ~tid, v>, ~k.1) ) @ #vk.36 )
+                    case Source_produces
+                    solve( !KU( sign(<'root', $X, $X.1, <'push', $v>, ~tid>, ~k) ) @ #vk.42 )
+                      case Human_dynamic_task
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      by solve( !KU( ~k ) @ #vk.53 )
+                    qed
+                  next
+                    case c_sign
+                    by solve( !KU( ~k.1 ) @ #vk.53 )
+                  qed
+                next
+                  case c_sign
+                  by solve( !KU( ~k ) @ #vk.53 )
+                qed
+              qed
+            qed
+          next
+            case case_2
+            solve( !Pk( $X, pk(x) ) ▶₃ #i )
+              case Register
+              solve( !Pk( S, pk(x) ) ▶₄ #i )
+                case Register
+                solve( !KU( sign(<'cap', $X, tid, 'hole', op, $X.3>, ~k) ) @ #vk.31 )
+                  case Human_dynamic_task
+                  solve( !KU( sign(<'prov', $X.3, ~tid, v>, ~k.1) ) @ #vk.36 )
+                    case Source_produces
+                    solve( !KU( sign(<'root', $X, $X.1, <'push', $v>, ~tid>, ~k) ) @ #vk.42 )
+                      case Human_dynamic_task
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      by solve( !KU( ~k ) @ #vk.55 )
+                    qed
+                  next
+                    case c_sign
+                    by solve( !KU( ~k.1 ) @ #vk.55 )
+                  qed
+                next
+                  case c_sign
+                  by solve( !KU( ~k ) @ #vk.55 )
+                qed
+              qed
+            qed
+          qed
+        next
+          case case_2
+          solve( (c3 = <op, v>)  ∥
+                 (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c3 = <op.1, 'any'>)) )
+            case case_1
+            solve( !Pk( $X, pk(x) ) ▶₃ #i )
+              case Register
+              solve( !Pk( S, pk(x) ) ▶₄ #i )
+                case Register
+                solve( !KU( sign(<'cap', $X, tid, 'hole', op, $X.3>, ~k) ) @ #vk.31 )
+                  case Human_dynamic_task
+                  solve( !KU( sign(<'prov', $X.3, ~tid, v>, ~k.1) ) @ #vk.36 )
+                    case Source_produces
+                    solve( !KU( sign(<'root', $X, $X.1, <'push', $v>, ~tid>, ~k) ) @ #vk.43 )
+                      case Human_dynamic_task
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      by solve( !KU( ~k ) @ #vk.55 )
+                    qed
+                  next
+                    case c_sign
+                    by solve( !KU( ~k.1 ) @ #vk.55 )
+                  qed
+                next
+                  case c_sign
+                  by solve( !KU( ~k ) @ #vk.55 )
+                qed
+              qed
+            qed
+          next
+            case case_2
+            solve( !Pk( $X, pk(x) ) ▶₃ #i )
+              case Register
+              solve( !Pk( S, pk(x) ) ▶₄ #i )
+                case Register
+                solve( !KU( sign(<'cap', $X, tid, 'hole', op, $X.3>, ~k) ) @ #vk.31 )
+                  case Human_dynamic_task
+                  solve( !KU( sign(<'prov', $X.3, ~tid, v>, ~k.1) ) @ #vk.36 )
+                    case Source_produces
+                    solve( !KU( sign(<'root', $X, $X.1, <'push', $v>, ~tid>, ~k) ) @ #vk.43 )
+                      case Human_dynamic_task
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      by solve( !KU( ~k ) @ #vk.55 )
+                    qed
+                  next
+                    case c_sign
+                    by solve( !KU( ~k.1 ) @ #vk.55 )
+                  qed
+                next
+                  case c_sign
+                  by solve( !KU( ~k ) @ #vk.55 )
+                qed
+              qed
+            qed
+          qed
+        qed
+      next
+        case case_2
+        solve( (c2 = <op, v>)  ∥
+               (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c2 = <op.1, 'any'>)) )
+          case case_1
+          solve( (c3 = <op, v>)  ∥
+                 (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c3 = <op.1, 'any'>)) )
+            case case_1
+            solve( !Pk( $X, pk(x) ) ▶₃ #i )
+              case Register
+              solve( !Pk( S, pk(x) ) ▶₄ #i )
+                case Register
+                solve( !KU( sign(<'cap', $X, tid, 'hole', op, $X.3>, ~k) ) @ #vk.32 )
+                  case Human_dynamic_task
+                  solve( !KU( sign(<'prov', $X.3, ~tid, v>, ~k.1) ) @ #vk.37 )
+                    case Source_produces
+                    solve( !KU( sign(<'root', $X, $X.1, <'push', 'any'>, ~tid>, ~k)
+                           ) @ #vk.43 )
+                      case Human_dynamic_task
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      by solve( !KU( ~k ) @ #vk.55 )
+                    qed
+                  next
+                    case c_sign
+                    by solve( !KU( ~k.1 ) @ #vk.55 )
+                  qed
+                next
+                  case c_sign
+                  by solve( !KU( ~k ) @ #vk.55 )
+                qed
+              qed
+            qed
+          next
+            case case_2
+            solve( !Pk( $X, pk(x) ) ▶₃ #i )
+              case Register
+              solve( !Pk( S, pk(x) ) ▶₄ #i )
+                case Register
+                solve( !KU( sign(<'cap', $X, tid, 'hole', op, $X.3>, ~k) ) @ #vk.32 )
+                  case Human_dynamic_task
+                  solve( !KU( sign(<'prov', $X.3, ~tid, v>, ~k.1) ) @ #vk.37 )
+                    case Source_produces
+                    solve( !KU( sign(<'root', $X, $X.1, <'push', 'any'>, ~tid>, ~k)
+                           ) @ #vk.43 )
+                      case Human_dynamic_task
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      by solve( !KU( ~k ) @ #vk.55 )
+                    qed
+                  next
+                    case c_sign
+                    by solve( !KU( ~k.1 ) @ #vk.55 )
+                  qed
+                next
+                  case c_sign
+                  by solve( !KU( ~k ) @ #vk.55 )
+                qed
+              qed
+            qed
+          qed
+        next
+          case case_2
+          solve( (c3 = <op, v>)  ∥
+                 (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c3 = <op.1, 'any'>)) )
+            case case_1
+            solve( !Pk( $X, pk(x) ) ▶₃ #i )
+              case Register
+              solve( !Pk( S, pk(x) ) ▶₄ #i )
+                case Register
+                solve( !KU( sign(<'cap', $X, tid, 'hole', op, $X.3>, ~k) ) @ #vk.32 )
+                  case Human_dynamic_task
+                  solve( !KU( sign(<'prov', $X.3, ~tid, v>, ~k.1) ) @ #vk.37 )
+                    case Source_produces
+                    solve( !KU( sign(<'root', $X, $X.1, <'push', 'any'>, ~tid>, ~k)
+                           ) @ #vk.43 )
+                      case Human_dynamic_task
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      by solve( !KU( ~k ) @ #vk.55 )
+                    qed
+                  next
+                    case c_sign
+                    by solve( !KU( ~k.1 ) @ #vk.55 )
+                  qed
+                next
+                  case c_sign
+                  by solve( !KU( ~k ) @ #vk.55 )
+                qed
+              qed
+            qed
+          next
+            case case_2
+            solve( !Pk( $X, pk(x) ) ▶₃ #i )
+              case Register
+              solve( !Pk( S, pk(x) ) ▶₄ #i )
+                case Register
+                solve( !KU( sign(<'cap', $X, tid, 'hole', op, $X.3>, ~k) ) @ #vk.32 )
+                  case Human_dynamic_task
+                  solve( !KU( sign(<'prov', $X.3, ~tid, v>, ~k.1) ) @ #vk.37 )
+                    case Source_produces
+                    solve( !KU( sign(<'root', $X, $X.1, <'push', 'any'>, ~tid>, ~k)
+                           ) @ #vk.43 )
+                      case Human_dynamic_task
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      by solve( !KU( ~k ) @ #vk.55 )
+                    qed
+                  next
+                    case c_sign
+                    by solve( !KU( ~k.1 ) @ #vk.55 )
+                  qed
+                next
+                  case c_sign
+                  by solve( !KU( ~k ) @ #vk.55 )
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+next
+  case case_2
+  solve( Chain( R, H, A1, c1, A2, c2, A3, c3, tid ) @ #i )
+    case Resource_accept_capsule_fixed
+    solve( Received( R, A3, <op, v>, H, A1, c1, A2, c2, c3, tid ) ▶₀ #i )
+      case Resource_receive_bearer
+      solve( (c1 = <op, v>)  ∥
+             (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c1 = <op.1, 'any'>)) )
+        case case_1
+        solve( (c2 = <op, v>)  ∥
+               (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c2 = <op.1, 'any'>)) )
+          case case_1
+          solve( (c3 = <op, v>)  ∥
+                 (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c3 = <op.1, 'any'>)) )
+            case case_1
+            solve( !Pk( $X, pk(x) ) ▶₂ #i )
+              case Register
+              solve( !KU( sign(<'cap', $X, tid, 'fixed', op, v>, ~k) ) @ #vk.24 )
+                case Human_static_task
+                solve( !KU( sign(<'root', $X, $X.1, <'push', $repo>, ~tid>, ~k)
+                       ) @ #vk.32 )
+                  case Human_static_task
+                  by contradiction /* from formulas */
+                next
+                  case c_sign
+                  by solve( !KU( ~k ) @ #vk.45 )
+                qed
+              next
+                case c_sign
+                by solve( !KU( ~k ) @ #vk.45 )
+              qed
+            qed
+          next
+            case case_2
+            solve( !Pk( $X, pk(x) ) ▶₂ #i )
+              case Register
+              solve( !KU( sign(<'cap', $X, tid, 'fixed', op, v>, ~k) ) @ #vk.24 )
+                case Human_static_task
+                solve( !KU( sign(<'root', $X, $X.1, <'push', $repo>, ~tid>, ~k)
+                       ) @ #vk.32 )
+                  case Human_static_task
+                  by contradiction /* from formulas */
+                next
+                  case c_sign
+                  by solve( !KU( ~k ) @ #vk.47 )
+                qed
+              next
+                case c_sign
+                by solve( !KU( ~k ) @ #vk.47 )
+              qed
+            qed
+          qed
+        next
+          case case_2
+          solve( (c3 = <op, v>)  ∥
+                 (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c3 = <op.1, 'any'>)) )
+            case case_1
+            solve( !Pk( $X, pk(x) ) ▶₂ #i )
+              case Register
+              solve( !KU( sign(<'cap', $X, tid, 'fixed', op, v>, ~k) ) @ #vk.24 )
+                case Human_static_task
+                solve( !KU( sign(<'root', $X, $X.1, <'push', $repo>, ~tid>, ~k)
+                       ) @ #vk.33 )
+                  case Human_static_task
+                  by contradiction /* from formulas */
+                next
+                  case c_sign
+                  by solve( !KU( ~k ) @ #vk.47 )
+                qed
+              next
+                case c_sign
+                by solve( !KU( ~k ) @ #vk.47 )
+              qed
+            qed
+          next
+            case case_2
+            solve( !Pk( $X, pk(x) ) ▶₂ #i )
+              case Register
+              solve( !KU( sign(<'cap', $X, tid, 'fixed', op, v>, ~k) ) @ #vk.24 )
+                case Human_static_task
+                solve( !KU( sign(<'root', $X, $X.1, <'push', $repo>, ~tid>, ~k)
+                       ) @ #vk.33 )
+                  case Human_static_task
+                  by contradiction /* from formulas */
+                next
+                  case c_sign
+                  by solve( !KU( ~k ) @ #vk.47 )
+                qed
+              next
+                case c_sign
+                by solve( !KU( ~k ) @ #vk.47 )
+              qed
+            qed
+          qed
+        qed
+      next
+        case case_2
+        solve( (c2 = <op, v>)  ∥
+               (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c2 = <op.1, 'any'>)) )
+          case case_1
+          solve( (c3 = <op, v>)  ∥
+                 (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c3 = <op.1, 'any'>)) )
+            case case_1
+            solve( !Pk( $X, pk(x) ) ▶₂ #i )
+              case Register
+              solve( !KU( sign(<'cap', $X, tid, 'fixed', op, v>, ~k) ) @ #vk.25 )
+                case Human_static_task
+                solve( !KU( sign(<'root', $X, $X.1, <'push', 'any'>, ~tid>, ~k)
+                       ) @ #vk.33 )
+                  case Human_static_task
+                  solve( !KU( sign(<'del', $A1, $X.1, <'push', $repo>, 
+                                    h(<<'root', $X, $A1, <'push', 'any'>, ~tid>, 
+                                       sign(<'root', $X, $A1, <'push', 'any'>, ~tid>, ~k)>)
+                                   >,
+                                   ~k.1)
+                         ) @ #vk.40 )
+                    case Agent1_steered_delegation
+                    by contradiction /* from formulas */
+                  next
+                    case c_sign
+                    by solve( !KU( ~k.1 ) @ #vk.47 )
+                  qed
+                next
+                  case c_sign
+                  by solve( !KU( ~k ) @ #vk.47 )
+                qed
+              next
+                case c_sign
+                by solve( !KU( ~k ) @ #vk.47 )
+              qed
+            qed
+          next
+            case case_2
+            solve( !Pk( $X, pk(x) ) ▶₂ #i )
+              case Register
+              solve( !KU( sign(<'cap', $X, tid, 'fixed', op, v>, ~k) ) @ #vk.25 )
+                case Human_static_task
+                solve( !KU( sign(<'root', $X, $X.1, <'push', 'any'>, ~tid>, ~k)
+                       ) @ #vk.33 )
+                  case Human_static_task
+                  solve( !KU( sign(<'del', $A1, $X.1, <'push', $repo>, 
+                                    h(<<'root', $X, $A1, <'push', 'any'>, ~tid>, 
+                                       sign(<'root', $X, $A1, <'push', 'any'>, ~tid>, ~k)>)
+                                   >,
+                                   ~k.1)
+                         ) @ #vk.40 )
+                    case Agent1_steered_delegation
+                    by contradiction /* from formulas */
+                  next
+                    case c_sign
+                    by solve( !KU( ~k.1 ) @ #vk.47 )
+                  qed
+                next
+                  case c_sign
+                  by solve( !KU( ~k ) @ #vk.47 )
+                qed
+              next
+                case c_sign
+                by solve( !KU( ~k ) @ #vk.47 )
+              qed
+            qed
+          qed
+        next
+          case case_2
+          solve( (c3 = <op, v>)  ∥
+                 (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c3 = <op.1, 'any'>)) )
+            case case_1
+            solve( !Pk( $X, pk(x) ) ▶₂ #i )
+              case Register
+              solve( !KU( sign(<'cap', $X, tid, 'fixed', op, v>, ~k) ) @ #vk.25 )
+                case Human_static_task
+                solve( !KU( sign(<'root', $X, $X.1, <'push', 'any'>, ~tid>, ~k)
+                       ) @ #vk.33 )
+                  case Human_static_task
+                  solve( !KU( sign(<'del', $A1, $X.1, <'push', 'any'>, 
+                                    h(<<'root', $X, $A1, <'push', 'any'>, ~tid>, 
+                                       sign(<'root', $X, $A1, <'push', 'any'>, ~tid>, ~k)>)
+                                   >,
+                                   ~k.1)
+                         ) @ #vk.40 )
+                    case Agent1_steered_delegation
+                    by contradiction /* from formulas */
+                  next
+                    case c_sign
+                    by solve( !KU( ~k.1 ) @ #vk.47 )
+                  qed
+                next
+                  case c_sign
+                  by solve( !KU( ~k ) @ #vk.47 )
+                qed
+              next
+                case c_sign
+                by solve( !KU( ~k ) @ #vk.47 )
+              qed
+            qed
+          next
+            case case_2
+            solve( !Pk( $X, pk(x) ) ▶₂ #i )
+              case Register
+              solve( !KU( sign(<'cap', $X, tid, 'fixed', op, v>, ~k) ) @ #vk.25 )
+                case Human_static_task
+                solve( !KU( sign(<'root', $X, $X.1, <'push', 'any'>, ~tid>, ~k)
+                       ) @ #vk.33 )
+                  case Human_static_task
+                  solve( !KU( sign(<'del', $A1, $X.1, <'push', 'any'>, 
+                                    h(<<'root', $X, $A1, <'push', 'any'>, ~tid>, 
+                                       sign(<'root', $X, $A1, <'push', 'any'>, ~tid>, ~k)>)
+                                   >,
+                                   ~k.1)
+                         ) @ #vk.40 )
+                    case Agent1_steered_delegation
+                    by contradiction /* from formulas */
+                  next
+                    case c_sign
+                    by solve( !KU( ~k.1 ) @ #vk.47 )
+                  qed
+                next
+                  case c_sign
+                  by solve( !KU( ~k ) @ #vk.47 )
+                qed
+              next
+                case c_sign
+                by solve( !KU( ~k ) @ #vk.47 )
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  next
+    case Resource_accept_capsule_hole_provenance
+    solve( Received( R, A3, <op, v>, H, A1, c1, A2, c2, c3, tid ) ▶₀ #i )
+      case Resource_receive_bearer
+      solve( (c1 = <op, v>)  ∥
+             (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c1 = <op.1, 'any'>)) )
+        case case_1
+        solve( (c2 = <op, v>)  ∥
+               (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c2 = <op.1, 'any'>)) )
+          case case_1
+          solve( (c3 = <op, v>)  ∥
+                 (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c3 = <op.1, 'any'>)) )
+            case case_1
+            solve( !Pk( $X, pk(x) ) ▶₃ #i )
+              case Register
+              solve( !Pk( S, pk(x) ) ▶₄ #i )
+                case Register
+                solve( !KU( sign(<'cap', $X, tid, 'hole', op, $X.3>, ~k) ) @ #vk.31 )
+                  case Human_dynamic_task
+                  solve( !KU( sign(<'prov', $X.3, ~tid, v>, ~k.1) ) @ #vk.36 )
+                    case Source_produces
+                    solve( !KU( sign(<'root', $X, $X.1, <'push', $v>, ~tid>, ~k) ) @ #vk.42 )
+                      case Human_dynamic_task
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      by solve( !KU( ~k ) @ #vk.53 )
+                    qed
+                  next
+                    case c_sign
+                    by solve( !KU( ~k.1 ) @ #vk.53 )
+                  qed
+                next
+                  case c_sign
+                  by solve( !KU( ~k ) @ #vk.53 )
+                qed
+              qed
+            qed
+          next
+            case case_2
+            solve( !Pk( $X, pk(x) ) ▶₃ #i )
+              case Register
+              solve( !Pk( S, pk(x) ) ▶₄ #i )
+                case Register
+                solve( !KU( sign(<'cap', $X, tid, 'hole', op, $X.3>, ~k) ) @ #vk.31 )
+                  case Human_dynamic_task
+                  solve( !KU( sign(<'prov', $X.3, ~tid, v>, ~k.1) ) @ #vk.36 )
+                    case Source_produces
+                    solve( !KU( sign(<'root', $X, $X.1, <'push', $v>, ~tid>, ~k) ) @ #vk.42 )
+                      case Human_dynamic_task
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      by solve( !KU( ~k ) @ #vk.55 )
+                    qed
+                  next
+                    case c_sign
+                    by solve( !KU( ~k.1 ) @ #vk.55 )
+                  qed
+                next
+                  case c_sign
+                  by solve( !KU( ~k ) @ #vk.55 )
+                qed
+              qed
+            qed
+          qed
+        next
+          case case_2
+          solve( (c3 = <op, v>)  ∥
+                 (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c3 = <op.1, 'any'>)) )
+            case case_1
+            solve( !Pk( $X, pk(x) ) ▶₃ #i )
+              case Register
+              solve( !Pk( S, pk(x) ) ▶₄ #i )
+                case Register
+                solve( !KU( sign(<'cap', $X, tid, 'hole', op, $X.3>, ~k) ) @ #vk.31 )
+                  case Human_dynamic_task
+                  solve( !KU( sign(<'prov', $X.3, ~tid, v>, ~k.1) ) @ #vk.36 )
+                    case Source_produces
+                    solve( !KU( sign(<'root', $X, $X.1, <'push', $v>, ~tid>, ~k) ) @ #vk.43 )
+                      case Human_dynamic_task
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      by solve( !KU( ~k ) @ #vk.55 )
+                    qed
+                  next
+                    case c_sign
+                    by solve( !KU( ~k.1 ) @ #vk.55 )
+                  qed
+                next
+                  case c_sign
+                  by solve( !KU( ~k ) @ #vk.55 )
+                qed
+              qed
+            qed
+          next
+            case case_2
+            solve( !Pk( $X, pk(x) ) ▶₃ #i )
+              case Register
+              solve( !Pk( S, pk(x) ) ▶₄ #i )
+                case Register
+                solve( !KU( sign(<'cap', $X, tid, 'hole', op, $X.3>, ~k) ) @ #vk.31 )
+                  case Human_dynamic_task
+                  solve( !KU( sign(<'prov', $X.3, ~tid, v>, ~k.1) ) @ #vk.36 )
+                    case Source_produces
+                    solve( !KU( sign(<'root', $X, $X.1, <'push', $v>, ~tid>, ~k) ) @ #vk.43 )
+                      case Human_dynamic_task
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      by solve( !KU( ~k ) @ #vk.55 )
+                    qed
+                  next
+                    case c_sign
+                    by solve( !KU( ~k.1 ) @ #vk.55 )
+                  qed
+                next
+                  case c_sign
+                  by solve( !KU( ~k ) @ #vk.55 )
+                qed
+              qed
+            qed
+          qed
+        qed
+      next
+        case case_2
+        solve( (c2 = <op, v>)  ∥
+               (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c2 = <op.1, 'any'>)) )
+          case case_1
+          solve( (c3 = <op, v>)  ∥
+                 (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c3 = <op.1, 'any'>)) )
+            case case_1
+            solve( !Pk( $X, pk(x) ) ▶₃ #i )
+              case Register
+              solve( !Pk( S, pk(x) ) ▶₄ #i )
+                case Register
+                solve( !KU( sign(<'cap', $X, tid, 'hole', op, $X.3>, ~k) ) @ #vk.32 )
+                  case Human_dynamic_task
+                  solve( !KU( sign(<'prov', $X.3, ~tid, v>, ~k.1) ) @ #vk.37 )
+                    case Source_produces
+                    solve( !KU( sign(<'root', $X, $X.1, <'push', 'any'>, ~tid>, ~k)
+                           ) @ #vk.43 )
+                      case Human_dynamic_task
+                      solve( !KU( sign(<'del', $A1, $X.1, <'push', $v>, 
+                                        h(<<'root', $X, $A1, <'push', 'any'>, ~tid>, 
+                                           sign(<'root', $X, $A1, <'push', 'any'>, ~tid>, ~k)>)
+                                       >,
+                                       ~k.2)
+                             ) @ #vk.48 )
+                        case Agent1_steered_delegation
+                        by contradiction /* from formulas */
+                      next
+                        case c_sign
+                        by solve( !KU( ~k.2 ) @ #vk.55 )
+                      qed
+                    next
+                      case c_sign
+                      by solve( !KU( ~k ) @ #vk.55 )
+                    qed
+                  next
+                    case c_sign
+                    by solve( !KU( ~k.1 ) @ #vk.55 )
+                  qed
+                next
+                  case c_sign
+                  by solve( !KU( ~k ) @ #vk.55 )
+                qed
+              qed
+            qed
+          next
+            case case_2
+            solve( !Pk( $X, pk(x) ) ▶₃ #i )
+              case Register
+              solve( !Pk( S, pk(x) ) ▶₄ #i )
+                case Register
+                solve( !KU( sign(<'cap', $X, tid, 'hole', op, $X.3>, ~k) ) @ #vk.32 )
+                  case Human_dynamic_task
+                  solve( !KU( sign(<'prov', $X.3, ~tid, v>, ~k.1) ) @ #vk.37 )
+                    case Source_produces
+                    solve( !KU( sign(<'root', $X, $X.1, <'push', 'any'>, ~tid>, ~k)
+                           ) @ #vk.43 )
+                      case Human_dynamic_task
+                      solve( !KU( sign(<'del', $A1, $X.1, <'push', $v>, 
+                                        h(<<'root', $X, $A1, <'push', 'any'>, ~tid>, 
+                                           sign(<'root', $X, $A1, <'push', 'any'>, ~tid>, ~k)>)
+                                       >,
+                                       ~k.2)
+                             ) @ #vk.48 )
+                        case Agent1_steered_delegation
+                        by contradiction /* from formulas */
+                      next
+                        case c_sign
+                        by solve( !KU( ~k.2 ) @ #vk.55 )
+                      qed
+                    next
+                      case c_sign
+                      by solve( !KU( ~k ) @ #vk.55 )
+                    qed
+                  next
+                    case c_sign
+                    by solve( !KU( ~k.1 ) @ #vk.55 )
+                  qed
+                next
+                  case c_sign
+                  by solve( !KU( ~k ) @ #vk.55 )
+                qed
+              qed
+            qed
+          qed
+        next
+          case case_2
+          solve( (c3 = <op, v>)  ∥
+                 (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c3 = <op.1, 'any'>)) )
+            case case_1
+            solve( !Pk( $X, pk(x) ) ▶₃ #i )
+              case Register
+              solve( !Pk( S, pk(x) ) ▶₄ #i )
+                case Register
+                solve( !KU( sign(<'cap', $X, tid, 'hole', op, $X.3>, ~k) ) @ #vk.32 )
+                  case Human_dynamic_task
+                  solve( !KU( sign(<'prov', $X.3, ~tid, v>, ~k.1) ) @ #vk.37 )
+                    case Source_produces
+                    solve( !KU( sign(<'root', $X, $X.1, <'push', 'any'>, ~tid>, ~k)
+                           ) @ #vk.43 )
+                      case Human_dynamic_task
+                      solve( !KU( sign(<'del', $A1, $X.1, <'push', 'any'>, 
+                                        h(<<'root', $X, $A1, <'push', 'any'>, ~tid>, 
+                                           sign(<'root', $X, $A1, <'push', 'any'>, ~tid>, ~k)>)
+                                       >,
+                                       ~k.2)
+                             ) @ #vk.48 )
+                        case Agent1_steered_delegation
+                        by contradiction /* from formulas */
+                      next
+                        case c_sign
+                        by solve( !KU( ~k.2 ) @ #vk.55 )
+                      qed
+                    next
+                      case c_sign
+                      by solve( !KU( ~k ) @ #vk.55 )
+                    qed
+                  next
+                    case c_sign
+                    by solve( !KU( ~k.1 ) @ #vk.55 )
+                  qed
+                next
+                  case c_sign
+                  by solve( !KU( ~k ) @ #vk.55 )
+                qed
+              qed
+            qed
+          next
+            case case_2
+            solve( !Pk( $X, pk(x) ) ▶₃ #i )
+              case Register
+              solve( !Pk( S, pk(x) ) ▶₄ #i )
+                case Register
+                solve( !KU( sign(<'cap', $X, tid, 'hole', op, $X.3>, ~k) ) @ #vk.32 )
+                  case Human_dynamic_task
+                  solve( !KU( sign(<'prov', $X.3, ~tid, v>, ~k.1) ) @ #vk.37 )
+                    case Source_produces
+                    solve( !KU( sign(<'root', $X, $X.1, <'push', 'any'>, ~tid>, ~k)
+                           ) @ #vk.43 )
+                      case Human_dynamic_task
+                      solve( !KU( sign(<'del', $A1, $X.1, <'push', 'any'>, 
+                                        h(<<'root', $X, $A1, <'push', 'any'>, ~tid>, 
+                                           sign(<'root', $X, $A1, <'push', 'any'>, ~tid>, ~k)>)
+                                       >,
+                                       ~k.2)
+                             ) @ #vk.48 )
+                        case Agent1_steered_delegation
+                        by contradiction /* from formulas */
+                      next
+                        case c_sign
+                        by solve( !KU( ~k.2 ) @ #vk.55 )
+                      qed
+                    next
+                      case c_sign
+                      by solve( !KU( ~k ) @ #vk.55 )
+                    qed
+                  next
+                    case c_sign
+                    by solve( !KU( ~k.1 ) @ #vk.55 )
+                  qed
+                next
+                  case c_sign
+                  by solve( !KU( ~k ) @ #vk.55 )
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+next
+  case case_3
+  solve( Chain( R, H, A1, c1, A2, c2, A3, c3, tid ) @ #i )
+    case Resource_accept_capsule_fixed
+    solve( Received( R, A3, <op, v>, H, A1, c1, A2, c2, c3, tid ) ▶₀ #i )
+      case Resource_receive_bearer
+      solve( (c1 = <op, v>)  ∥
+             (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c1 = <op.1, 'any'>)) )
+        case case_1
+        solve( (c2 = <op, v>)  ∥
+               (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c2 = <op.1, 'any'>)) )
+          case case_1
+          solve( (c3 = <op, v>)  ∥
+                 (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c3 = <op.1, 'any'>)) )
+            case case_1
+            solve( !Pk( $X, pk(x) ) ▶₂ #i )
+              case Register
+              solve( !KU( sign(<'cap', $X, tid, 'fixed', op, v>, ~k) ) @ #vk.24 )
+                case Human_static_task
+                solve( !KU( sign(<'root', $X, $X.1, <'push', $repo>, ~tid>, ~k)
+                       ) @ #vk.32 )
+                  case Human_static_task
+                  by contradiction /* from formulas */
+                next
+                  case c_sign
+                  by solve( !KU( ~k ) @ #vk.45 )
+                qed
+              next
+                case c_sign
+                by solve( !KU( ~k ) @ #vk.45 )
+              qed
+            qed
+          next
+            case case_2
+            solve( !Pk( $X, pk(x) ) ▶₂ #i )
+              case Register
+              solve( !KU( sign(<'cap', $X, tid, 'fixed', op, v>, ~k) ) @ #vk.24 )
+                case Human_static_task
+                solve( !KU( sign(<'root', $X, $X.1, <'push', $repo>, ~tid>, ~k)
+                       ) @ #vk.32 )
+                  case Human_static_task
+                  by contradiction /* from formulas */
+                next
+                  case c_sign
+                  by solve( !KU( ~k ) @ #vk.47 )
+                qed
+              next
+                case c_sign
+                by solve( !KU( ~k ) @ #vk.47 )
+              qed
+            qed
+          qed
+        next
+          case case_2
+          solve( (c3 = <op, v>)  ∥
+                 (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c3 = <op.1, 'any'>)) )
+            case case_1
+            solve( !Pk( $X, pk(x) ) ▶₂ #i )
+              case Register
+              solve( !KU( sign(<'cap', $X, tid, 'fixed', op, v>, ~k) ) @ #vk.24 )
+                case Human_static_task
+                solve( !KU( sign(<'root', $X, $X.1, <'push', $repo>, ~tid>, ~k)
+                       ) @ #vk.33 )
+                  case Human_static_task
+                  by contradiction /* from formulas */
+                next
+                  case c_sign
+                  by solve( !KU( ~k ) @ #vk.47 )
+                qed
+              next
+                case c_sign
+                by solve( !KU( ~k ) @ #vk.47 )
+              qed
+            qed
+          next
+            case case_2
+            solve( !Pk( $X, pk(x) ) ▶₂ #i )
+              case Register
+              solve( !KU( sign(<'cap', $X, tid, 'fixed', op, v>, ~k) ) @ #vk.24 )
+                case Human_static_task
+                solve( !KU( sign(<'root', $X, $X.1, <'push', $repo>, ~tid>, ~k)
+                       ) @ #vk.33 )
+                  case Human_static_task
+                  by contradiction /* from formulas */
+                next
+                  case c_sign
+                  by solve( !KU( ~k ) @ #vk.47 )
+                qed
+              next
+                case c_sign
+                by solve( !KU( ~k ) @ #vk.47 )
+              qed
+            qed
+          qed
+        qed
+      next
+        case case_2
+        solve( (c2 = <op, v>)  ∥
+               (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c2 = <op.1, 'any'>)) )
+          case case_1
+          solve( (c3 = <op, v>)  ∥
+                 (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c3 = <op.1, 'any'>)) )
+            case case_1
+            solve( !Pk( $X, pk(x) ) ▶₂ #i )
+              case Register
+              solve( !KU( sign(<'cap', $X, tid, 'fixed', op, v>, ~k) ) @ #vk.25 )
+                case Human_static_task
+                solve( !KU( sign(<'root', $X, $X.1, <'push', 'any'>, ~tid>, ~k)
+                       ) @ #vk.33 )
+                  case Human_static_task
+                  solve( !KU( sign(<'del', $A1, $X.1, <'push', $repo>, 
+                                    h(<<'root', $X, $A1, <'push', 'any'>, ~tid>, 
+                                       sign(<'root', $X, $A1, <'push', 'any'>, ~tid>, ~k)>)
+                                   >,
+                                   ~k.1)
+                         ) @ #vk.40 )
+                    case Agent1_steered_delegation
+                    solve( !KU( sign(<'del', $X.1, A3, <'push', $repo>, 
+                                      h(<<'root', $X, $A1, <'push', 'any'>, ~tid>, 
+                                         sign(<'root', $X, $A1, <'push', 'any'>, ~tid>, ~k), 
+                                         <'del', $A1, $X.1, <'push', $repo>, 
+                                          h(<<'root', $X, $A1, <'push', 'any'>, ~tid>, 
+                                             sign(<'root', $X, $A1, <'push', 'any'>, ~tid>, ~k)>)
+                                         >, 
+                                         sign(<'del', $A1, $X.1, <'push', $repo>, 
+                                               h(<<'root', $X, $A1, <'push', 'any'>, ~tid>, 
+                                                  sign(<'root', $X, $A1, <'push', 'any'>, ~tid>, ~k)>)
+                                              >,
+                                              ~k.1)
+                                        >)
+                                     >,
+                                     ~k.2)
+                           ) @ #vk.46 )
+                      case Agent2_steered_delegation
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      by solve( !KU( ~k.2 ) @ #vk.49 )
+                    qed
+                  next
+                    case c_sign
+                    by solve( !KU( ~k.1 ) @ #vk.47 )
+                  qed
+                next
+                  case c_sign
+                  by solve( !KU( ~k ) @ #vk.47 )
+                qed
+              next
+                case c_sign
+                by solve( !KU( ~k ) @ #vk.47 )
+              qed
+            qed
+          next
+            case case_2
+            solve( !Pk( $X, pk(x) ) ▶₂ #i )
+              case Register
+              solve( !KU( sign(<'cap', $X, tid, 'fixed', op, v>, ~k) ) @ #vk.25 )
+                case Human_static_task
+                solve( !KU( sign(<'root', $X, $X.1, <'push', 'any'>, ~tid>, ~k)
+                       ) @ #vk.33 )
+                  case Human_static_task
+                  solve( !KU( sign(<'del', $A1, $X.1, <'push', $repo>, 
+                                    h(<<'root', $X, $A1, <'push', 'any'>, ~tid>, 
+                                       sign(<'root', $X, $A1, <'push', 'any'>, ~tid>, ~k)>)
+                                   >,
+                                   ~k.1)
+                         ) @ #vk.40 )
+                    case Agent1_steered_delegation
+                    solve( !KU( sign(<'del', $X.1, A3, <'push', 'any'>, 
+                                      h(<<'root', $X, $A1, <'push', 'any'>, ~tid>, 
+                                         sign(<'root', $X, $A1, <'push', 'any'>, ~tid>, ~k), 
+                                         <'del', $A1, $X.1, <'push', $repo>, 
+                                          h(<<'root', $X, $A1, <'push', 'any'>, ~tid>, 
+                                             sign(<'root', $X, $A1, <'push', 'any'>, ~tid>, ~k)>)
+                                         >, 
+                                         sign(<'del', $A1, $X.1, <'push', $repo>, 
+                                               h(<<'root', $X, $A1, <'push', 'any'>, ~tid>, 
+                                                  sign(<'root', $X, $A1, <'push', 'any'>, ~tid>, ~k)>)
+                                              >,
+                                              ~k.1)
+                                        >)
+                                     >,
+                                     ~k.2)
+                           ) @ #vk.46 )
+                      case Agent2_steered_delegation
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      by solve( !KU( ~k.2 ) @ #vk.49 )
+                    qed
+                  next
+                    case c_sign
+                    by solve( !KU( ~k.1 ) @ #vk.47 )
+                  qed
+                next
+                  case c_sign
+                  by solve( !KU( ~k ) @ #vk.47 )
+                qed
+              next
+                case c_sign
+                by solve( !KU( ~k ) @ #vk.47 )
+              qed
+            qed
+          qed
+        next
+          case case_2
+          solve( (c3 = <op, v>)  ∥
+                 (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c3 = <op.1, 'any'>)) )
+            case case_1
+            solve( !Pk( $X, pk(x) ) ▶₂ #i )
+              case Register
+              solve( !KU( sign(<'cap', $X, tid, 'fixed', op, v>, ~k) ) @ #vk.25 )
+                case Human_static_task
+                solve( !KU( sign(<'root', $X, $X.1, <'push', 'any'>, ~tid>, ~k)
+                       ) @ #vk.33 )
+                  case Human_static_task
+                  solve( !KU( sign(<'del', $A1, $X.1, <'push', 'any'>, 
+                                    h(<<'root', $X, $A1, <'push', 'any'>, ~tid>, 
+                                       sign(<'root', $X, $A1, <'push', 'any'>, ~tid>, ~k)>)
+                                   >,
+                                   ~k.1)
+                         ) @ #vk.40 )
+                    case Agent1_steered_delegation
+                    solve( !KU( sign(<'del', $X.1, A3, <'push', $repo>, 
+                                      h(<<'root', $X, $A1, <'push', 'any'>, ~tid>, 
+                                         sign(<'root', $X, $A1, <'push', 'any'>, ~tid>, ~k), 
+                                         <'del', $A1, $X.1, <'push', 'any'>, 
+                                          h(<<'root', $X, $A1, <'push', 'any'>, ~tid>, 
+                                             sign(<'root', $X, $A1, <'push', 'any'>, ~tid>, ~k)>)
+                                         >, 
+                                         sign(<'del', $A1, $X.1, <'push', 'any'>, 
+                                               h(<<'root', $X, $A1, <'push', 'any'>, ~tid>, 
+                                                  sign(<'root', $X, $A1, <'push', 'any'>, ~tid>, ~k)>)
+                                              >,
+                                              ~k.1)
+                                        >)
+                                     >,
+                                     ~k.2)
+                           ) @ #vk.46 )
+                      case Agent2_steered_delegation
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      by solve( !KU( ~k.2 ) @ #vk.49 )
+                    qed
+                  next
+                    case c_sign
+                    by solve( !KU( ~k.1 ) @ #vk.47 )
+                  qed
+                next
+                  case c_sign
+                  by solve( !KU( ~k ) @ #vk.47 )
+                qed
+              next
+                case c_sign
+                by solve( !KU( ~k ) @ #vk.47 )
+              qed
+            qed
+          next
+            case case_2
+            solve( !Pk( $X, pk(x) ) ▶₂ #i )
+              case Register
+              solve( !KU( sign(<'cap', $X, tid, 'fixed', op, v>, ~k) ) @ #vk.25 )
+                case Human_static_task
+                solve( !KU( sign(<'root', $X, $X.1, <'push', 'any'>, ~tid>, ~k)
+                       ) @ #vk.33 )
+                  case Human_static_task
+                  solve( !KU( sign(<'del', $A1, $X.1, <'push', 'any'>, 
+                                    h(<<'root', $X, $A1, <'push', 'any'>, ~tid>, 
+                                       sign(<'root', $X, $A1, <'push', 'any'>, ~tid>, ~k)>)
+                                   >,
+                                   ~k.1)
+                         ) @ #vk.40 )
+                    case Agent1_steered_delegation
+                    solve( !KU( sign(<'del', $X.1, A3, <'push', 'any'>, 
+                                      h(<<'root', $X, $A1, <'push', 'any'>, ~tid>, 
+                                         sign(<'root', $X, $A1, <'push', 'any'>, ~tid>, ~k), 
+                                         <'del', $A1, $X.1, <'push', 'any'>, 
+                                          h(<<'root', $X, $A1, <'push', 'any'>, ~tid>, 
+                                             sign(<'root', $X, $A1, <'push', 'any'>, ~tid>, ~k)>)
+                                         >, 
+                                         sign(<'del', $A1, $X.1, <'push', 'any'>, 
+                                               h(<<'root', $X, $A1, <'push', 'any'>, ~tid>, 
+                                                  sign(<'root', $X, $A1, <'push', 'any'>, ~tid>, ~k)>)
+                                              >,
+                                              ~k.1)
+                                        >)
+                                     >,
+                                     ~k.2)
+                           ) @ #vk.46 )
+                      case Agent2_steered_delegation
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      by solve( !KU( ~k.2 ) @ #vk.49 )
+                    qed
+                  next
+                    case c_sign
+                    by solve( !KU( ~k.1 ) @ #vk.47 )
+                  qed
+                next
+                  case c_sign
+                  by solve( !KU( ~k ) @ #vk.47 )
+                qed
+              next
+                case c_sign
+                by solve( !KU( ~k ) @ #vk.47 )
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  next
+    case Resource_accept_capsule_hole_provenance
+    solve( Received( R, A3, <op, v>, H, A1, c1, A2, c2, c3, tid ) ▶₀ #i )
+      case Resource_receive_bearer
+      solve( (c1 = <op, v>)  ∥
+             (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c1 = <op.1, 'any'>)) )
+        case case_1
+        solve( (c2 = <op, v>)  ∥
+               (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c2 = <op.1, 'any'>)) )
+          case case_1
+          solve( (c3 = <op, v>)  ∥
+                 (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c3 = <op.1, 'any'>)) )
+            case case_1
+            solve( !Pk( $X, pk(x) ) ▶₃ #i )
+              case Register
+              solve( !Pk( S, pk(x) ) ▶₄ #i )
+                case Register
+                solve( !KU( sign(<'cap', $X, tid, 'hole', op, $X.3>, ~k) ) @ #vk.31 )
+                  case Human_dynamic_task
+                  solve( !KU( sign(<'prov', $X.3, ~tid, v>, ~k.1) ) @ #vk.36 )
+                    case Source_produces
+                    solve( !KU( sign(<'root', $X, $X.1, <'push', $v>, ~tid>, ~k) ) @ #vk.42 )
+                      case Human_dynamic_task
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      by solve( !KU( ~k ) @ #vk.53 )
+                    qed
+                  next
+                    case c_sign
+                    by solve( !KU( ~k.1 ) @ #vk.53 )
+                  qed
+                next
+                  case c_sign
+                  by solve( !KU( ~k ) @ #vk.53 )
+                qed
+              qed
+            qed
+          next
+            case case_2
+            solve( !Pk( $X, pk(x) ) ▶₃ #i )
+              case Register
+              solve( !Pk( S, pk(x) ) ▶₄ #i )
+                case Register
+                solve( !KU( sign(<'cap', $X, tid, 'hole', op, $X.3>, ~k) ) @ #vk.31 )
+                  case Human_dynamic_task
+                  solve( !KU( sign(<'prov', $X.3, ~tid, v>, ~k.1) ) @ #vk.36 )
+                    case Source_produces
+                    solve( !KU( sign(<'root', $X, $X.1, <'push', $v>, ~tid>, ~k) ) @ #vk.42 )
+                      case Human_dynamic_task
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      by solve( !KU( ~k ) @ #vk.55 )
+                    qed
+                  next
+                    case c_sign
+                    by solve( !KU( ~k.1 ) @ #vk.55 )
+                  qed
+                next
+                  case c_sign
+                  by solve( !KU( ~k ) @ #vk.55 )
+                qed
+              qed
+            qed
+          qed
+        next
+          case case_2
+          solve( (c3 = <op, v>)  ∥
+                 (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c3 = <op.1, 'any'>)) )
+            case case_1
+            solve( !Pk( $X, pk(x) ) ▶₃ #i )
+              case Register
+              solve( !Pk( S, pk(x) ) ▶₄ #i )
+                case Register
+                solve( !KU( sign(<'cap', $X, tid, 'hole', op, $X.3>, ~k) ) @ #vk.31 )
+                  case Human_dynamic_task
+                  solve( !KU( sign(<'prov', $X.3, ~tid, v>, ~k.1) ) @ #vk.36 )
+                    case Source_produces
+                    solve( !KU( sign(<'root', $X, $X.1, <'push', $v>, ~tid>, ~k) ) @ #vk.43 )
+                      case Human_dynamic_task
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      by solve( !KU( ~k ) @ #vk.55 )
+                    qed
+                  next
+                    case c_sign
+                    by solve( !KU( ~k.1 ) @ #vk.55 )
+                  qed
+                next
+                  case c_sign
+                  by solve( !KU( ~k ) @ #vk.55 )
+                qed
+              qed
+            qed
+          next
+            case case_2
+            solve( !Pk( $X, pk(x) ) ▶₃ #i )
+              case Register
+              solve( !Pk( S, pk(x) ) ▶₄ #i )
+                case Register
+                solve( !KU( sign(<'cap', $X, tid, 'hole', op, $X.3>, ~k) ) @ #vk.31 )
+                  case Human_dynamic_task
+                  solve( !KU( sign(<'prov', $X.3, ~tid, v>, ~k.1) ) @ #vk.36 )
+                    case Source_produces
+                    solve( !KU( sign(<'root', $X, $X.1, <'push', $v>, ~tid>, ~k) ) @ #vk.43 )
+                      case Human_dynamic_task
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      by solve( !KU( ~k ) @ #vk.55 )
+                    qed
+                  next
+                    case c_sign
+                    by solve( !KU( ~k.1 ) @ #vk.55 )
+                  qed
+                next
+                  case c_sign
+                  by solve( !KU( ~k ) @ #vk.55 )
+                qed
+              qed
+            qed
+          qed
+        qed
+      next
+        case case_2
+        solve( (c2 = <op, v>)  ∥
+               (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c2 = <op.1, 'any'>)) )
+          case case_1
+          solve( (c3 = <op, v>)  ∥
+                 (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c3 = <op.1, 'any'>)) )
+            case case_1
+            solve( !Pk( $X, pk(x) ) ▶₃ #i )
+              case Register
+              solve( !Pk( S, pk(x) ) ▶₄ #i )
+                case Register
+                solve( !KU( sign(<'cap', $X, tid, 'hole', op, $X.3>, ~k) ) @ #vk.32 )
+                  case Human_dynamic_task
+                  solve( !KU( sign(<'prov', $X.3, ~tid, v>, ~k.1) ) @ #vk.37 )
+                    case Source_produces
+                    solve( !KU( sign(<'root', $X, $X.1, <'push', 'any'>, ~tid>, ~k)
+                           ) @ #vk.43 )
+                      case Human_dynamic_task
+                      solve( !KU( sign(<'del', $A1, $X.1, <'push', $v>, 
+                                        h(<<'root', $X, $A1, <'push', 'any'>, ~tid>, 
+                                           sign(<'root', $X, $A1, <'push', 'any'>, ~tid>, ~k)>)
+                                       >,
+                                       ~k.2)
+                             ) @ #vk.48 )
+                        case Agent1_steered_delegation
+                        solve( !KU( sign(<'del', $X.1, A3, <'push', $v>, 
+                                          h(<<'root', $X, $A1, <'push', 'any'>, ~tid>, 
+                                             sign(<'root', $X, $A1, <'push', 'any'>, ~tid>, ~k), 
+                                             <'del', $A1, $X.1, <'push', $v>, 
+                                              h(<<'root', $X, $A1, <'push', 'any'>, ~tid>, 
+                                                 sign(<'root', $X, $A1, <'push', 'any'>, ~tid>, ~k)>)
+                                             >, 
+                                             sign(<'del', $A1, $X.1, <'push', $v>, 
+                                                   h(<<'root', $X, $A1, <'push', 'any'>, ~tid>, 
+                                                      sign(<'root', $X, $A1, <'push', 'any'>, ~tid>, ~k)>)
+                                                  >,
+                                                  ~k.2)
+                                            >)
+                                         >,
+                                         ~k.3)
+                               ) @ #vk.54 )
+                          case Agent2_steered_delegation
+                          by contradiction /* from formulas */
+                        next
+                          case c_sign
+                          by solve( !KU( ~k.3 ) @ #vk.57 )
+                        qed
+                      next
+                        case c_sign
+                        by solve( !KU( ~k.2 ) @ #vk.55 )
+                      qed
+                    next
+                      case c_sign
+                      by solve( !KU( ~k ) @ #vk.55 )
+                    qed
+                  next
+                    case c_sign
+                    by solve( !KU( ~k.1 ) @ #vk.55 )
+                  qed
+                next
+                  case c_sign
+                  by solve( !KU( ~k ) @ #vk.55 )
+                qed
+              qed
+            qed
+          next
+            case case_2
+            solve( !Pk( $X, pk(x) ) ▶₃ #i )
+              case Register
+              solve( !Pk( S, pk(x) ) ▶₄ #i )
+                case Register
+                solve( !KU( sign(<'cap', $X, tid, 'hole', op, $X.3>, ~k) ) @ #vk.32 )
+                  case Human_dynamic_task
+                  solve( !KU( sign(<'prov', $X.3, ~tid, v>, ~k.1) ) @ #vk.37 )
+                    case Source_produces
+                    solve( !KU( sign(<'root', $X, $X.1, <'push', 'any'>, ~tid>, ~k)
+                           ) @ #vk.43 )
+                      case Human_dynamic_task
+                      solve( !KU( sign(<'del', $A1, $X.1, <'push', $v>, 
+                                        h(<<'root', $X, $A1, <'push', 'any'>, ~tid>, 
+                                           sign(<'root', $X, $A1, <'push', 'any'>, ~tid>, ~k)>)
+                                       >,
+                                       ~k.2)
+                             ) @ #vk.48 )
+                        case Agent1_steered_delegation
+                        solve( !KU( sign(<'del', $X.1, A3, <'push', 'any'>, 
+                                          h(<<'root', $X, $A1, <'push', 'any'>, ~tid>, 
+                                             sign(<'root', $X, $A1, <'push', 'any'>, ~tid>, ~k), 
+                                             <'del', $A1, $X.1, <'push', $v>, 
+                                              h(<<'root', $X, $A1, <'push', 'any'>, ~tid>, 
+                                                 sign(<'root', $X, $A1, <'push', 'any'>, ~tid>, ~k)>)
+                                             >, 
+                                             sign(<'del', $A1, $X.1, <'push', $v>, 
+                                                   h(<<'root', $X, $A1, <'push', 'any'>, ~tid>, 
+                                                      sign(<'root', $X, $A1, <'push', 'any'>, ~tid>, ~k)>)
+                                                  >,
+                                                  ~k.2)
+                                            >)
+                                         >,
+                                         ~k.3)
+                               ) @ #vk.54 )
+                          case Agent2_steered_delegation
+                          by contradiction /* from formulas */
+                        next
+                          case c_sign
+                          by solve( !KU( ~k.3 ) @ #vk.57 )
+                        qed
+                      next
+                        case c_sign
+                        by solve( !KU( ~k.2 ) @ #vk.55 )
+                      qed
+                    next
+                      case c_sign
+                      by solve( !KU( ~k ) @ #vk.55 )
+                    qed
+                  next
+                    case c_sign
+                    by solve( !KU( ~k.1 ) @ #vk.55 )
+                  qed
+                next
+                  case c_sign
+                  by solve( !KU( ~k ) @ #vk.55 )
+                qed
+              qed
+            qed
+          qed
+        next
+          case case_2
+          solve( (c3 = <op, v>)  ∥
+                 (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c3 = <op.1, 'any'>)) )
+            case case_1
+            solve( !Pk( $X, pk(x) ) ▶₃ #i )
+              case Register
+              solve( !Pk( S, pk(x) ) ▶₄ #i )
+                case Register
+                solve( !KU( sign(<'cap', $X, tid, 'hole', op, $X.3>, ~k) ) @ #vk.32 )
+                  case Human_dynamic_task
+                  solve( !KU( sign(<'prov', $X.3, ~tid, v>, ~k.1) ) @ #vk.37 )
+                    case Source_produces
+                    solve( !KU( sign(<'root', $X, $X.1, <'push', 'any'>, ~tid>, ~k)
+                           ) @ #vk.43 )
+                      case Human_dynamic_task
+                      solve( !KU( sign(<'del', $A1, $X.1, <'push', 'any'>, 
+                                        h(<<'root', $X, $A1, <'push', 'any'>, ~tid>, 
+                                           sign(<'root', $X, $A1, <'push', 'any'>, ~tid>, ~k)>)
+                                       >,
+                                       ~k.2)
+                             ) @ #vk.48 )
+                        case Agent1_steered_delegation
+                        solve( !KU( sign(<'del', $X.1, A3, <'push', $v>, 
+                                          h(<<'root', $X, $A1, <'push', 'any'>, ~tid>, 
+                                             sign(<'root', $X, $A1, <'push', 'any'>, ~tid>, ~k), 
+                                             <'del', $A1, $X.1, <'push', 'any'>, 
+                                              h(<<'root', $X, $A1, <'push', 'any'>, ~tid>, 
+                                                 sign(<'root', $X, $A1, <'push', 'any'>, ~tid>, ~k)>)
+                                             >, 
+                                             sign(<'del', $A1, $X.1, <'push', 'any'>, 
+                                                   h(<<'root', $X, $A1, <'push', 'any'>, ~tid>, 
+                                                      sign(<'root', $X, $A1, <'push', 'any'>, ~tid>, ~k)>)
+                                                  >,
+                                                  ~k.2)
+                                            >)
+                                         >,
+                                         ~k.3)
+                               ) @ #vk.54 )
+                          case Agent2_steered_delegation
+                          by contradiction /* from formulas */
+                        next
+                          case c_sign
+                          by solve( !KU( ~k.3 ) @ #vk.57 )
+                        qed
+                      next
+                        case c_sign
+                        by solve( !KU( ~k.2 ) @ #vk.55 )
+                      qed
+                    next
+                      case c_sign
+                      by solve( !KU( ~k ) @ #vk.55 )
+                    qed
+                  next
+                    case c_sign
+                    by solve( !KU( ~k.1 ) @ #vk.55 )
+                  qed
+                next
+                  case c_sign
+                  by solve( !KU( ~k ) @ #vk.55 )
+                qed
+              qed
+            qed
+          next
+            case case_2
+            solve( !Pk( $X, pk(x) ) ▶₃ #i )
+              case Register
+              solve( !Pk( S, pk(x) ) ▶₄ #i )
+                case Register
+                solve( !KU( sign(<'cap', $X, tid, 'hole', op, $X.3>, ~k) ) @ #vk.32 )
+                  case Human_dynamic_task
+                  solve( !KU( sign(<'prov', $X.3, ~tid, v>, ~k.1) ) @ #vk.37 )
+                    case Source_produces
+                    solve( !KU( sign(<'root', $X, $X.1, <'push', 'any'>, ~tid>, ~k)
+                           ) @ #vk.43 )
+                      case Human_dynamic_task
+                      solve( !KU( sign(<'del', $A1, $X.1, <'push', 'any'>, 
+                                        h(<<'root', $X, $A1, <'push', 'any'>, ~tid>, 
+                                           sign(<'root', $X, $A1, <'push', 'any'>, ~tid>, ~k)>)
+                                       >,
+                                       ~k.2)
+                             ) @ #vk.48 )
+                        case Agent1_steered_delegation
+                        solve( !KU( sign(<'del', $X.1, A3, <'push', 'any'>, 
+                                          h(<<'root', $X, $A1, <'push', 'any'>, ~tid>, 
+                                             sign(<'root', $X, $A1, <'push', 'any'>, ~tid>, ~k), 
+                                             <'del', $A1, $X.1, <'push', 'any'>, 
+                                              h(<<'root', $X, $A1, <'push', 'any'>, ~tid>, 
+                                                 sign(<'root', $X, $A1, <'push', 'any'>, ~tid>, ~k)>)
+                                             >, 
+                                             sign(<'del', $A1, $X.1, <'push', 'any'>, 
+                                                   h(<<'root', $X, $A1, <'push', 'any'>, ~tid>, 
+                                                      sign(<'root', $X, $A1, <'push', 'any'>, ~tid>, ~k)>)
+                                                  >,
+                                                  ~k.2)
+                                            >)
+                                         >,
+                                         ~k.3)
+                               ) @ #vk.54 )
+                          case Agent2_steered_delegation
+                          by contradiction /* from formulas */
+                        next
+                          case c_sign
+                          by solve( !KU( ~k.3 ) @ #vk.57 )
+                        qed
+                      next
+                        case c_sign
+                        by solve( !KU( ~k.2 ) @ #vk.55 )
+                      qed
+                    next
+                      case c_sign
+                      by solve( !KU( ~k ) @ #vk.55 )
+                    qed
+                  next
+                    case c_sign
+                    by solve( !KU( ~k.1 ) @ #vk.55 )
+                  qed
+                next
+                  case c_sign
+                  by solve( !KU( ~k ) @ #vk.55 )
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma NOESC_action_within_root_caveat:
+  all-traces
+  "∀ R P a tid #i.
+    (Accept( R, P, a, tid ) @ #i) ⇒
+    (∃ H A1 c1 #j.
+      (RootDelegated( H, A1, c1, tid ) @ #j) ∧
+      ((c1 = a) ∨ (∃ op x. (a = <op, x>) ∧ (c1 = <op, 'any'>))))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ R P a tid #i.
+  (Accept( R, P, a, tid ) @ #i)
+ ∧
+  ∀ H A1 c1 #j.
+   (RootDelegated( H, A1, c1, tid ) @ #j)
+  ⇒
+   (¬(c1 = a)) ∧ (∀ op x. (a = <op, x>) ∧ (c1 = <op, 'any'>) ⇒ ⊥)"
+*/
+simplify
+solve( Accept( R, P, a, tid ) @ #i )
+  case Resource_accept_capsule_fixed
+  solve( Received( R, P, <op, v>, H, A1, c1, A2, c2, c3, tid ) ▶₀ #i )
+    case Resource_receive_bearer
+    solve( (c1 = <op, v>)  ∥
+           (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c1 = <op.1, 'any'>)) )
+      case case_1
+      solve( (c2 = <op, v>)  ∥
+             (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c2 = <op.1, 'any'>)) )
+        case case_1
+        solve( (c3 = <op, v>)  ∥
+               (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c3 = <op.1, 'any'>)) )
+          case case_1
+          solve( !Pk( $X, pk(x) ) ▶₂ #i )
+            case Register
+            solve( !KU( sign(<'cap', $X, tid, 'fixed', op, v>, ~k) ) @ #vk.24 )
+              case Human_static_task
+              by contradiction /* from formulas */
+            next
+              case c_sign
+              by solve( !KU( ~k ) @ #vk.45 )
+            qed
+          qed
+        next
+          case case_2
+          solve( !Pk( $X, pk(x) ) ▶₂ #i )
+            case Register
+            solve( !KU( sign(<'cap', $X, tid, 'fixed', op, v>, ~k) ) @ #vk.24 )
+              case Human_static_task
+              by contradiction /* from formulas */
+            next
+              case c_sign
+              by solve( !KU( ~k ) @ #vk.47 )
+            qed
+          qed
+        qed
+      next
+        case case_2
+        solve( (c3 = <op, v>)  ∥
+               (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c3 = <op.1, 'any'>)) )
+          case case_1
+          solve( !Pk( $X, pk(x) ) ▶₂ #i )
+            case Register
+            solve( !KU( sign(<'cap', $X, tid, 'fixed', op, v>, ~k) ) @ #vk.24 )
+              case Human_static_task
+              by contradiction /* from formulas */
+            next
+              case c_sign
+              by solve( !KU( ~k ) @ #vk.47 )
+            qed
+          qed
+        next
+          case case_2
+          solve( !Pk( $X, pk(x) ) ▶₂ #i )
+            case Register
+            solve( !KU( sign(<'cap', $X, tid, 'fixed', op, v>, ~k) ) @ #vk.24 )
+              case Human_static_task
+              by contradiction /* from formulas */
+            next
+              case c_sign
+              by solve( !KU( ~k ) @ #vk.47 )
+            qed
+          qed
+        qed
+      qed
+    next
+      case case_2
+      solve( (c2 = <op, v>)  ∥
+             (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c2 = <op.1, 'any'>)) )
+        case case_1
+        solve( (c3 = <op, v>)  ∥
+               (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c3 = <op.1, 'any'>)) )
+          case case_1
+          solve( !Pk( $X, pk(x) ) ▶₂ #i )
+            case Register
+            solve( !KU( sign(<'cap', $X, tid, 'fixed', op, v>, ~k) ) @ #vk.25 )
+              case Human_static_task
+              by contradiction /* from formulas */
+            next
+              case c_sign
+              by solve( !KU( ~k ) @ #vk.47 )
+            qed
+          qed
+        next
+          case case_2
+          solve( !Pk( $X, pk(x) ) ▶₂ #i )
+            case Register
+            solve( !KU( sign(<'cap', $X, tid, 'fixed', op, v>, ~k) ) @ #vk.25 )
+              case Human_static_task
+              by contradiction /* from formulas */
+            next
+              case c_sign
+              by solve( !KU( ~k ) @ #vk.47 )
+            qed
+          qed
+        qed
+      next
+        case case_2
+        solve( (c3 = <op, v>)  ∥
+               (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c3 = <op.1, 'any'>)) )
+          case case_1
+          solve( !Pk( $X, pk(x) ) ▶₂ #i )
+            case Register
+            solve( !KU( sign(<'cap', $X, tid, 'fixed', op, v>, ~k) ) @ #vk.25 )
+              case Human_static_task
+              by contradiction /* from formulas */
+            next
+              case c_sign
+              by solve( !KU( ~k ) @ #vk.47 )
+            qed
+          qed
+        next
+          case case_2
+          solve( !Pk( $X, pk(x) ) ▶₂ #i )
+            case Register
+            solve( !KU( sign(<'cap', $X, tid, 'fixed', op, v>, ~k) ) @ #vk.25 )
+              case Human_static_task
+              by contradiction /* from formulas */
+            next
+              case c_sign
+              by solve( !KU( ~k ) @ #vk.47 )
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+next
+  case Resource_accept_capsule_hole_provenance
+  solve( Received( R, P, <op, v>, H, A1, c1, A2, c2, c3, tid ) ▶₀ #i )
+    case Resource_receive_bearer
+    solve( (c1 = <op, v>)  ∥
+           (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c1 = <op.1, 'any'>)) )
+      case case_1
+      solve( (c2 = <op, v>)  ∥
+             (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c2 = <op.1, 'any'>)) )
+        case case_1
+        solve( (c3 = <op, v>)  ∥
+               (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c3 = <op.1, 'any'>)) )
+          case case_1
+          solve( !Pk( $X, pk(x) ) ▶₃ #i )
+            case Register
+            solve( !Pk( S, pk(x) ) ▶₄ #i )
+              case Register
+              solve( !KU( sign(<'cap', $X, tid, 'hole', op, $X.3>, ~k) ) @ #vk.31 )
+                case Human_dynamic_task
+                by contradiction /* from formulas */
+              next
+                case c_sign
+                by solve( !KU( ~k ) @ #vk.53 )
+              qed
+            qed
+          qed
+        next
+          case case_2
+          solve( !Pk( $X, pk(x) ) ▶₃ #i )
+            case Register
+            solve( !Pk( S, pk(x) ) ▶₄ #i )
+              case Register
+              solve( !KU( sign(<'cap', $X, tid, 'hole', op, $X.3>, ~k) ) @ #vk.31 )
+                case Human_dynamic_task
+                by contradiction /* from formulas */
+              next
+                case c_sign
+                by solve( !KU( ~k ) @ #vk.55 )
+              qed
+            qed
+          qed
+        qed
+      next
+        case case_2
+        solve( (c3 = <op, v>)  ∥
+               (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c3 = <op.1, 'any'>)) )
+          case case_1
+          solve( !Pk( $X, pk(x) ) ▶₃ #i )
+            case Register
+            solve( !Pk( S, pk(x) ) ▶₄ #i )
+              case Register
+              solve( !KU( sign(<'cap', $X, tid, 'hole', op, $X.3>, ~k) ) @ #vk.31 )
+                case Human_dynamic_task
+                by contradiction /* from formulas */
+              next
+                case c_sign
+                by solve( !KU( ~k ) @ #vk.55 )
+              qed
+            qed
+          qed
+        next
+          case case_2
+          solve( !Pk( $X, pk(x) ) ▶₃ #i )
+            case Register
+            solve( !Pk( S, pk(x) ) ▶₄ #i )
+              case Register
+              solve( !KU( sign(<'cap', $X, tid, 'hole', op, $X.3>, ~k) ) @ #vk.31 )
+                case Human_dynamic_task
+                by contradiction /* from formulas */
+              next
+                case c_sign
+                by solve( !KU( ~k ) @ #vk.55 )
+              qed
+            qed
+          qed
+        qed
+      qed
+    next
+      case case_2
+      solve( (c2 = <op, v>)  ∥
+             (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c2 = <op.1, 'any'>)) )
+        case case_1
+        solve( (c3 = <op, v>)  ∥
+               (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c3 = <op.1, 'any'>)) )
+          case case_1
+          solve( !Pk( $X, pk(x) ) ▶₃ #i )
+            case Register
+            solve( !Pk( S, pk(x) ) ▶₄ #i )
+              case Register
+              solve( !KU( sign(<'cap', $X, tid, 'hole', op, $X.3>, ~k) ) @ #vk.32 )
+                case Human_dynamic_task
+                by contradiction /* from formulas */
+              next
+                case c_sign
+                by solve( !KU( ~k ) @ #vk.55 )
+              qed
+            qed
+          qed
+        next
+          case case_2
+          solve( !Pk( $X, pk(x) ) ▶₃ #i )
+            case Register
+            solve( !Pk( S, pk(x) ) ▶₄ #i )
+              case Register
+              solve( !KU( sign(<'cap', $X, tid, 'hole', op, $X.3>, ~k) ) @ #vk.32 )
+                case Human_dynamic_task
+                by contradiction /* from formulas */
+              next
+                case c_sign
+                by solve( !KU( ~k ) @ #vk.55 )
+              qed
+            qed
+          qed
+        qed
+      next
+        case case_2
+        solve( (c3 = <op, v>)  ∥
+               (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c3 = <op.1, 'any'>)) )
+          case case_1
+          solve( !Pk( $X, pk(x) ) ▶₃ #i )
+            case Register
+            solve( !Pk( S, pk(x) ) ▶₄ #i )
+              case Register
+              solve( !KU( sign(<'cap', $X, tid, 'hole', op, $X.3>, ~k) ) @ #vk.32 )
+                case Human_dynamic_task
+                by contradiction /* from formulas */
+              next
+                case c_sign
+                by solve( !KU( ~k ) @ #vk.55 )
+              qed
+            qed
+          qed
+        next
+          case case_2
+          solve( !Pk( $X, pk(x) ) ▶₃ #i )
+            case Register
+            solve( !Pk( S, pk(x) ) ▶₄ #i )
+              case Register
+              solve( !KU( sign(<'cap', $X, tid, 'hole', op, $X.3>, ~k) ) @ #vk.32 )
+                case Human_dynamic_task
+                by contradiction /* from formulas */
+              next
+                case c_sign
+                by solve( !KU( ~k ) @ #vk.55 )
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma ATTR_logged_principal_sent_request:
+  all-traces
+  "∀ R P a tid #i.
+    (Accept( R, P, a, tid ) @ #i) ⇒
+    (∃ #j. (Request( P, a, tid ) @ #j) ∧ (#j < #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ R P a tid #i.
+  (Accept( R, P, a, tid ) @ #i)
+ ∧
+  ∀ #j. (Request( P, a, tid ) @ #j) ⇒ ¬(#j < #i)"
+*/
+simplify
+solve( Accept( R, P, a, tid ) @ #i )
+  case Resource_accept_capsule_fixed
+  solve( Received( R, P, <op, v>, H, A1, c1, A2, c2, c3, tid ) ▶₀ #i )
+    case Resource_receive_bearer
+    solve( (c1 = <op, v>)  ∥
+           (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c1 = <op.1, 'any'>)) )
+      case case_2
+      solve( (c2 = <op, v>)  ∥
+             (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c2 = <op.1, 'any'>)) )
+        case case_1
+        solve( (c3 = <op, v>)  ∥
+               (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c3 = <op.1, 'any'>)) )
+          case case_1
+          solve( !Pk( $X, pk(x) ) ▶₂ #i )
+            case Register
+            solve( !KU( sign(<'cap', $X, tid, 'fixed', op, v>, ~k) ) @ #vk.25 )
+              case Human_static_task
+              solve( !KU( sign(<'root', $X, $X.1, <'push', 'any'>, ~tid>, ~k)
+                     ) @ #vk.33 )
+                case Human_static_task
+                solve( !KU( sign(<'del', $A1, $X.1, <'push', $repo>, 
+                                  h(<<'root', $X, $A1, <'push', 'any'>, ~tid>, 
+                                     sign(<'root', $X, $A1, <'push', 'any'>, ~tid>, ~k)>)
+                                 >,
+                                 ~k.1)
+                       ) @ #vk.40 )
+                  case Agent1_steered_delegation
+                  solve( !KU( sign(<'del', $X.1, P, <'push', $repo>, 
+                                    h(<<'root', $X, $A1, <'push', 'any'>, ~tid>, 
+                                       sign(<'root', $X, $A1, <'push', 'any'>, ~tid>, ~k), 
+                                       <'del', $A1, $X.1, <'push', $repo>, 
+                                        h(<<'root', $X, $A1, <'push', 'any'>, ~tid>, 
+                                           sign(<'root', $X, $A1, <'push', 'any'>, ~tid>, ~k)>)
+                                       >, 
+                                       sign(<'del', $A1, $X.1, <'push', $repo>, 
+                                             h(<<'root', $X, $A1, <'push', 'any'>, ~tid>, 
+                                                sign(<'root', $X, $A1, <'push', 'any'>, ~tid>, ~k)>)
+                                            >,
+                                            ~k.1)
+                                      >)
+                                   >,
+                                   ~k.2)
+                         ) @ #vk.46 )
+                    case Agent2_steered_delegation
+                    solve( !KU( ~tid ) @ #vk.21 )
+                      case Human_static_task_case_1
+                      solve( !KU( h(<<'root', $X, $A1, <'push', 'any'>, ~tid>, 
+                                     sign(<'root', $X, $A1, <'push', 'any'>, ~tid>, ~k)>)
+                             ) @ #vk.48 )
+                        case Agent1_steered_delegation
+                        solve( !KU( h(<<'root', $X, $A1, <'push', 'any'>, ~tid>, 
+                                       sign(<'root', $X, $A1, <'push', 'any'>, ~tid>, ~k), 
+                                       <'del', $A1, $X.1, <'push', $repo>, 
+                                        h(<<'root', $X, $A1, <'push', 'any'>, ~tid>, 
+                                           sign(<'root', $X, $A1, <'push', 'any'>, ~tid>, ~k)>)
+                                       >, 
+                                       sign(<'del', $A1, $X.1, <'push', $repo>, 
+                                             h(<<'root', $X, $A1, <'push', 'any'>, ~tid>, 
+                                                sign(<'root', $X, $A1, <'push', 'any'>, ~tid>, ~k)>)
+                                            >,
+                                            ~k.1)
+                                      >)
+                               ) @ #vk.50 )
+                          case Agent2_steered_delegation
+                          SOLVED // trace found
+                        qed
+                      qed
+                    qed
+                  qed
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma TASK_static_task:
+  all-traces
+  "∀ R P a tid #i #j.
+    ((Accept( R, P, a, tid ) @ #i) ∧ (TaskStatic( tid ) @ #j)) ⇒
+    (∃ H #k. Intends( H, tid, <'fixed', a> ) @ #k)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ R P a tid #i #j.
+  (Accept( R, P, a, tid ) @ #i) ∧ (TaskStatic( tid ) @ #j)
+ ∧
+  ∀ H #k. (Intends( H, tid, <'fixed', a> ) @ #k) ⇒ ⊥"
+*/
+simplify
+solve( !Ltk( $H, kH ) ▶₁ #j )
+  case Register
+  solve( Accept( R, P, a, ~tid ) @ #i )
+    case Resource_accept_capsule_fixed
+    solve( Received( R, P, <op, v>, H, A1, c1, A2, c2, c3, ~tid ) ▶₀ #i )
+      case Resource_receive_bearer
+      solve( (c1 = <op, v>)  ∥
+             (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c1 = <op.1, 'any'>)) )
+        case case_1
+        solve( (c2 = <op, v>)  ∥
+               (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c2 = <op.1, 'any'>)) )
+          case case_1
+          solve( (c3 = <op, v>)  ∥
+                 (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c3 = <op.1, 'any'>)) )
+            case case_1
+            solve( !Pk( $X, pk(x) ) ▶₂ #i )
+              case Register
+              solve( !KU( sign(<'cap', $X, ~tid, 'fixed', op, v>, ~k) ) @ #vk.24 )
+                case Human_static_task
+                by contradiction /* from formulas */
+              next
+                case c_sign
+                by solve( !KU( ~k ) @ #vk.45 )
+              qed
+            qed
+          next
+            case case_2
+            solve( !Pk( $X, pk(x) ) ▶₂ #i )
+              case Register
+              solve( !KU( sign(<'cap', $X, ~tid, 'fixed', op, v>, ~k) ) @ #vk.24 )
+                case Human_static_task
+                by contradiction /* from formulas */
+              next
+                case c_sign
+                by solve( !KU( ~k ) @ #vk.47 )
+              qed
+            qed
+          qed
+        next
+          case case_2
+          solve( (c3 = <op, v>)  ∥
+                 (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c3 = <op.1, 'any'>)) )
+            case case_1
+            solve( !Pk( $X, pk(x) ) ▶₂ #i )
+              case Register
+              solve( !KU( sign(<'cap', $X, ~tid, 'fixed', op, v>, ~k) ) @ #vk.24 )
+                case Human_static_task
+                by contradiction /* from formulas */
+              next
+                case c_sign
+                by solve( !KU( ~k ) @ #vk.47 )
+              qed
+            qed
+          next
+            case case_2
+            solve( !Pk( $X, pk(x) ) ▶₂ #i )
+              case Register
+              solve( !KU( sign(<'cap', $X, ~tid, 'fixed', op, v>, ~k) ) @ #vk.24 )
+                case Human_static_task
+                by contradiction /* from formulas */
+              next
+                case c_sign
+                by solve( !KU( ~k ) @ #vk.47 )
+              qed
+            qed
+          qed
+        qed
+      next
+        case case_2
+        solve( (c2 = <op, v>)  ∥
+               (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c2 = <op.1, 'any'>)) )
+          case case_1
+          solve( (c3 = <op, v>)  ∥
+                 (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c3 = <op.1, 'any'>)) )
+            case case_1
+            solve( !Pk( $X, pk(x) ) ▶₂ #i )
+              case Register
+              solve( !KU( sign(<'cap', $X, ~tid, 'fixed', op, v>, ~k) ) @ #vk.25 )
+                case Human_static_task
+                by contradiction /* from formulas */
+              next
+                case c_sign
+                by solve( !KU( ~k ) @ #vk.47 )
+              qed
+            qed
+          next
+            case case_2
+            solve( !Pk( $X, pk(x) ) ▶₂ #i )
+              case Register
+              solve( !KU( sign(<'cap', $X, ~tid, 'fixed', op, v>, ~k) ) @ #vk.25 )
+                case Human_static_task
+                by contradiction /* from formulas */
+              next
+                case c_sign
+                by solve( !KU( ~k ) @ #vk.47 )
+              qed
+            qed
+          qed
+        next
+          case case_2
+          solve( (c3 = <op, v>)  ∥
+                 (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c3 = <op.1, 'any'>)) )
+            case case_1
+            solve( !Pk( $X, pk(x) ) ▶₂ #i )
+              case Register
+              solve( !KU( sign(<'cap', $X, ~tid, 'fixed', op, v>, ~k) ) @ #vk.25 )
+                case Human_static_task
+                by contradiction /* from formulas */
+              next
+                case c_sign
+                by solve( !KU( ~k ) @ #vk.47 )
+              qed
+            qed
+          next
+            case case_2
+            solve( !Pk( $X, pk(x) ) ▶₂ #i )
+              case Register
+              solve( !KU( sign(<'cap', $X, ~tid, 'fixed', op, v>, ~k) ) @ #vk.25 )
+                case Human_static_task
+                by contradiction /* from formulas */
+              next
+                case c_sign
+                by solve( !KU( ~k ) @ #vk.47 )
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  next
+    case Resource_accept_capsule_hole_provenance
+    solve( Received( R, P, <op, v>, H, A1, c1, A2, c2, c3, ~tid ) ▶₀ #i )
+      case Resource_receive_bearer
+      solve( (c1 = <op, v>)  ∥
+             (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c1 = <op.1, 'any'>)) )
+        case case_1
+        solve( (c2 = <op, v>)  ∥
+               (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c2 = <op.1, 'any'>)) )
+          case case_1
+          solve( (c3 = <op, v>)  ∥
+                 (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c3 = <op.1, 'any'>)) )
+            case case_1
+            solve( !Pk( $X, pk(x) ) ▶₃ #i )
+              case Register
+              solve( !Pk( S, pk(x) ) ▶₄ #i )
+                case Register
+                solve( !KU( sign(<'cap', $X, ~tid, 'hole', op, $X.3>, ~k) ) @ #vk.31 )
+                  case c_sign
+                  by solve( !KU( ~k ) @ #vk.53 )
+                qed
+              qed
+            qed
+          next
+            case case_2
+            solve( !Pk( $X, pk(x) ) ▶₃ #i )
+              case Register
+              solve( !Pk( S, pk(x) ) ▶₄ #i )
+                case Register
+                solve( !KU( sign(<'cap', $X, ~tid, 'hole', op, $X.3>, ~k) ) @ #vk.31 )
+                  case c_sign
+                  by solve( !KU( ~k ) @ #vk.55 )
+                qed
+              qed
+            qed
+          qed
+        next
+          case case_2
+          solve( (c3 = <op, v>)  ∥
+                 (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c3 = <op.1, 'any'>)) )
+            case case_1
+            solve( !Pk( $X, pk(x) ) ▶₃ #i )
+              case Register
+              solve( !Pk( S, pk(x) ) ▶₄ #i )
+                case Register
+                solve( !KU( sign(<'cap', $X, ~tid, 'hole', op, $X.3>, ~k) ) @ #vk.31 )
+                  case c_sign
+                  by solve( !KU( ~k ) @ #vk.55 )
+                qed
+              qed
+            qed
+          next
+            case case_2
+            solve( !Pk( $X, pk(x) ) ▶₃ #i )
+              case Register
+              solve( !Pk( S, pk(x) ) ▶₄ #i )
+                case Register
+                solve( !KU( sign(<'cap', $X, ~tid, 'hole', op, $X.3>, ~k) ) @ #vk.31 )
+                  case c_sign
+                  by solve( !KU( ~k ) @ #vk.55 )
+                qed
+              qed
+            qed
+          qed
+        qed
+      next
+        case case_2
+        solve( (c2 = <op, v>)  ∥
+               (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c2 = <op.1, 'any'>)) )
+          case case_1
+          solve( (c3 = <op, v>)  ∥
+                 (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c3 = <op.1, 'any'>)) )
+            case case_1
+            solve( !Pk( $X, pk(x) ) ▶₃ #i )
+              case Register
+              solve( !Pk( S, pk(x) ) ▶₄ #i )
+                case Register
+                solve( !KU( sign(<'cap', $X, ~tid, 'hole', op, $X.3>, ~k) ) @ #vk.32 )
+                  case c_sign
+                  by solve( !KU( ~k ) @ #vk.55 )
+                qed
+              qed
+            qed
+          next
+            case case_2
+            solve( !Pk( $X, pk(x) ) ▶₃ #i )
+              case Register
+              solve( !Pk( S, pk(x) ) ▶₄ #i )
+                case Register
+                solve( !KU( sign(<'cap', $X, ~tid, 'hole', op, $X.3>, ~k) ) @ #vk.32 )
+                  case c_sign
+                  by solve( !KU( ~k ) @ #vk.55 )
+                qed
+              qed
+            qed
+          qed
+        next
+          case case_2
+          solve( (c3 = <op, v>)  ∥
+                 (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c3 = <op.1, 'any'>)) )
+            case case_1
+            solve( !Pk( $X, pk(x) ) ▶₃ #i )
+              case Register
+              solve( !Pk( S, pk(x) ) ▶₄ #i )
+                case Register
+                solve( !KU( sign(<'cap', $X, ~tid, 'hole', op, $X.3>, ~k) ) @ #vk.32 )
+                  case c_sign
+                  by solve( !KU( ~k ) @ #vk.55 )
+                qed
+              qed
+            qed
+          next
+            case case_2
+            solve( !Pk( $X, pk(x) ) ▶₃ #i )
+              case Register
+              solve( !Pk( S, pk(x) ) ▶₄ #i )
+                case Register
+                solve( !KU( sign(<'cap', $X, ~tid, 'hole', op, $X.3>, ~k) ) @ #vk.32 )
+                  case c_sign
+                  by solve( !KU( ~k ) @ #vk.55 )
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma TASK_dynamic_task:
+  all-traces
+  "∀ R P op v tid #i #j.
+    ((Accept( R, P, <op, v>, tid ) @ #i) ∧ (TaskDynamic( tid ) @ #j)) ⇒
+    (∃ H S #k #l.
+      (Intends( H, tid, <'hole', op, S> ) @ #k) ∧
+      (Produced( S, tid, v ) @ #l))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ R P op v tid #i #j.
+  (Accept( R, P, <op, v>, tid ) @ #i) ∧ (TaskDynamic( tid ) @ #j)
+ ∧
+  ∀ H S #k #l.
+   (Intends( H, tid, <'hole', op, S> ) @ #k) ∧ (Produced( S, tid, v ) @ #l)
+  ⇒
+   ⊥"
+*/
+simplify
+solve( !Ltk( $H, kH ) ▶₁ #j )
+  case Register
+  solve( Accept( R, P, <op, v>, ~tid ) @ #i )
+    case Resource_accept_capsule_fixed
+    solve( Received( R, P, <op, v>, H, A1, c1, A2, c2, c3, ~tid ) ▶₀ #i )
+      case Resource_receive_bearer
+      solve( (c1 = <op, v>)  ∥
+             (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c1 = <op.1, 'any'>)) )
+        case case_1
+        solve( (c2 = <op, v>)  ∥
+               (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c2 = <op.1, 'any'>)) )
+          case case_1
+          solve( (c3 = <op, v>)  ∥
+                 (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c3 = <op.1, 'any'>)) )
+            case case_1
+            solve( !Pk( $X, pk(x) ) ▶₂ #i )
+              case Register
+              solve( !KU( sign(<'cap', $X, ~tid, 'fixed', op, v>, ~k) ) @ #vk.24 )
+                case c_sign
+                by solve( !KU( ~k ) @ #vk.45 )
+              qed
+            qed
+          next
+            case case_2
+            solve( !Pk( $X, pk(x) ) ▶₂ #i )
+              case Register
+              solve( !KU( sign(<'cap', $X, ~tid, 'fixed', op, v>, ~k) ) @ #vk.24 )
+                case c_sign
+                by solve( !KU( ~k ) @ #vk.47 )
+              qed
+            qed
+          qed
+        next
+          case case_2
+          solve( (c3 = <op, v>)  ∥
+                 (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c3 = <op.1, 'any'>)) )
+            case case_1
+            solve( !Pk( $X, pk(x) ) ▶₂ #i )
+              case Register
+              solve( !KU( sign(<'cap', $X, ~tid, 'fixed', op, v>, ~k) ) @ #vk.24 )
+                case c_sign
+                by solve( !KU( ~k ) @ #vk.47 )
+              qed
+            qed
+          next
+            case case_2
+            solve( !Pk( $X, pk(x) ) ▶₂ #i )
+              case Register
+              solve( !KU( sign(<'cap', $X, ~tid, 'fixed', op, v>, ~k) ) @ #vk.24 )
+                case c_sign
+                by solve( !KU( ~k ) @ #vk.47 )
+              qed
+            qed
+          qed
+        qed
+      next
+        case case_2
+        solve( (c2 = <op, v>)  ∥
+               (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c2 = <op.1, 'any'>)) )
+          case case_1
+          solve( (c3 = <op, v>)  ∥
+                 (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c3 = <op.1, 'any'>)) )
+            case case_1
+            solve( !Pk( $X, pk(x) ) ▶₂ #i )
+              case Register
+              solve( !KU( sign(<'cap', $X, ~tid, 'fixed', op, v>, ~k) ) @ #vk.25 )
+                case c_sign
+                by solve( !KU( ~k ) @ #vk.47 )
+              qed
+            qed
+          next
+            case case_2
+            solve( !Pk( $X, pk(x) ) ▶₂ #i )
+              case Register
+              solve( !KU( sign(<'cap', $X, ~tid, 'fixed', op, v>, ~k) ) @ #vk.25 )
+                case c_sign
+                by solve( !KU( ~k ) @ #vk.47 )
+              qed
+            qed
+          qed
+        next
+          case case_2
+          solve( (c3 = <op, v>)  ∥
+                 (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c3 = <op.1, 'any'>)) )
+            case case_1
+            solve( !Pk( $X, pk(x) ) ▶₂ #i )
+              case Register
+              solve( !KU( sign(<'cap', $X, ~tid, 'fixed', op, v>, ~k) ) @ #vk.25 )
+                case c_sign
+                by solve( !KU( ~k ) @ #vk.47 )
+              qed
+            qed
+          next
+            case case_2
+            solve( !Pk( $X, pk(x) ) ▶₂ #i )
+              case Register
+              solve( !KU( sign(<'cap', $X, ~tid, 'fixed', op, v>, ~k) ) @ #vk.25 )
+                case c_sign
+                by solve( !KU( ~k ) @ #vk.47 )
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  next
+    case Resource_accept_capsule_hole_provenance
+    solve( Received( R, P, <op, v>, H, A1, c1, A2, c2, c3, ~tid ) ▶₀ #i )
+      case Resource_receive_bearer
+      solve( (c1 = <op, v>)  ∥
+             (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c1 = <op.1, 'any'>)) )
+        case case_1
+        solve( (c2 = <op, v>)  ∥
+               (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c2 = <op.1, 'any'>)) )
+          case case_1
+          solve( (c3 = <op, v>)  ∥
+                 (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c3 = <op.1, 'any'>)) )
+            case case_1
+            solve( !Pk( $X, pk(x) ) ▶₃ #i )
+              case Register
+              solve( !Pk( S, pk(x) ) ▶₄ #i )
+                case Register
+                solve( !KU( sign(<'cap', $X, ~tid, 'hole', op, $X.3>, ~k) ) @ #vk.31 )
+                  case Human_dynamic_task
+                  solve( !KU( sign(<'prov', $Src, ~tid, v>, ~k.1) ) @ #vk.36 )
+                    case Source_produces
+                    by contradiction /* from formulas */
+                  next
+                    case c_sign
+                    by solve( !KU( ~k.1 ) @ #vk.53 )
+                  qed
+                next
+                  case c_sign
+                  by solve( !KU( ~k ) @ #vk.53 )
+                qed
+              qed
+            qed
+          next
+            case case_2
+            solve( !Pk( $X, pk(x) ) ▶₃ #i )
+              case Register
+              solve( !Pk( S, pk(x) ) ▶₄ #i )
+                case Register
+                solve( !KU( sign(<'cap', $X, ~tid, 'hole', op, $X.3>, ~k) ) @ #vk.31 )
+                  case Human_dynamic_task
+                  solve( !KU( sign(<'prov', $Src, ~tid, v>, ~k.1) ) @ #vk.36 )
+                    case Source_produces
+                    by contradiction /* from formulas */
+                  next
+                    case c_sign
+                    by solve( !KU( ~k.1 ) @ #vk.55 )
+                  qed
+                next
+                  case c_sign
+                  by solve( !KU( ~k ) @ #vk.55 )
+                qed
+              qed
+            qed
+          qed
+        next
+          case case_2
+          solve( (c3 = <op, v>)  ∥
+                 (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c3 = <op.1, 'any'>)) )
+            case case_1
+            solve( !Pk( $X, pk(x) ) ▶₃ #i )
+              case Register
+              solve( !Pk( S, pk(x) ) ▶₄ #i )
+                case Register
+                solve( !KU( sign(<'cap', $X, ~tid, 'hole', op, $X.3>, ~k) ) @ #vk.31 )
+                  case Human_dynamic_task
+                  solve( !KU( sign(<'prov', $Src, ~tid, v>, ~k.1) ) @ #vk.36 )
+                    case Source_produces
+                    by contradiction /* from formulas */
+                  next
+                    case c_sign
+                    by solve( !KU( ~k.1 ) @ #vk.55 )
+                  qed
+                next
+                  case c_sign
+                  by solve( !KU( ~k ) @ #vk.55 )
+                qed
+              qed
+            qed
+          next
+            case case_2
+            solve( !Pk( $X, pk(x) ) ▶₃ #i )
+              case Register
+              solve( !Pk( S, pk(x) ) ▶₄ #i )
+                case Register
+                solve( !KU( sign(<'cap', $X, ~tid, 'hole', op, $X.3>, ~k) ) @ #vk.31 )
+                  case Human_dynamic_task
+                  solve( !KU( sign(<'prov', $Src, ~tid, v>, ~k.1) ) @ #vk.36 )
+                    case Source_produces
+                    by contradiction /* from formulas */
+                  next
+                    case c_sign
+                    by solve( !KU( ~k.1 ) @ #vk.55 )
+                  qed
+                next
+                  case c_sign
+                  by solve( !KU( ~k ) @ #vk.55 )
+                qed
+              qed
+            qed
+          qed
+        qed
+      next
+        case case_2
+        solve( (c2 = <op, v>)  ∥
+               (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c2 = <op.1, 'any'>)) )
+          case case_1
+          solve( (c3 = <op, v>)  ∥
+                 (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c3 = <op.1, 'any'>)) )
+            case case_1
+            solve( !Pk( $X, pk(x) ) ▶₃ #i )
+              case Register
+              solve( !Pk( S, pk(x) ) ▶₄ #i )
+                case Register
+                solve( !KU( sign(<'cap', $X, ~tid, 'hole', op, $X.3>, ~k) ) @ #vk.32 )
+                  case Human_dynamic_task
+                  solve( !KU( sign(<'prov', $Src, ~tid, v>, ~k.1) ) @ #vk.37 )
+                    case Source_produces
+                    by contradiction /* from formulas */
+                  next
+                    case c_sign
+                    by solve( !KU( ~k.1 ) @ #vk.55 )
+                  qed
+                next
+                  case c_sign
+                  by solve( !KU( ~k ) @ #vk.55 )
+                qed
+              qed
+            qed
+          next
+            case case_2
+            solve( !Pk( $X, pk(x) ) ▶₃ #i )
+              case Register
+              solve( !Pk( S, pk(x) ) ▶₄ #i )
+                case Register
+                solve( !KU( sign(<'cap', $X, ~tid, 'hole', op, $X.3>, ~k) ) @ #vk.32 )
+                  case Human_dynamic_task
+                  solve( !KU( sign(<'prov', $Src, ~tid, v>, ~k.1) ) @ #vk.37 )
+                    case Source_produces
+                    by contradiction /* from formulas */
+                  next
+                    case c_sign
+                    by solve( !KU( ~k.1 ) @ #vk.55 )
+                  qed
+                next
+                  case c_sign
+                  by solve( !KU( ~k ) @ #vk.55 )
+                qed
+              qed
+            qed
+          qed
+        next
+          case case_2
+          solve( (c3 = <op, v>)  ∥
+                 (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c3 = <op.1, 'any'>)) )
+            case case_1
+            solve( !Pk( $X, pk(x) ) ▶₃ #i )
+              case Register
+              solve( !Pk( S, pk(x) ) ▶₄ #i )
+                case Register
+                solve( !KU( sign(<'cap', $X, ~tid, 'hole', op, $X.3>, ~k) ) @ #vk.32 )
+                  case Human_dynamic_task
+                  solve( !KU( sign(<'prov', $Src, ~tid, v>, ~k.1) ) @ #vk.37 )
+                    case Source_produces
+                    by contradiction /* from formulas */
+                  next
+                    case c_sign
+                    by solve( !KU( ~k.1 ) @ #vk.55 )
+                  qed
+                next
+                  case c_sign
+                  by solve( !KU( ~k ) @ #vk.55 )
+                qed
+              qed
+            qed
+          next
+            case case_2
+            solve( !Pk( $X, pk(x) ) ▶₃ #i )
+              case Register
+              solve( !Pk( S, pk(x) ) ▶₄ #i )
+                case Register
+                solve( !KU( sign(<'cap', $X, ~tid, 'hole', op, $X.3>, ~k) ) @ #vk.32 )
+                  case Human_dynamic_task
+                  solve( !KU( sign(<'prov', $Src, ~tid, v>, ~k.1) ) @ #vk.37 )
+                    case Source_produces
+                    by contradiction /* from formulas */
+                  next
+                    case c_sign
+                    by solve( !KU( ~k.1 ) @ #vk.55 )
+                  qed
+                next
+                  case c_sign
+                  by solve( !KU( ~k ) @ #vk.55 )
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+qed
+
+/* All wellformedness checks were successful. */
+
+/*
+Generated from:
+Tamarin version 1.12.0
+Maude version 3.5.1
+Git revision: 82780bbaf3328a45f624ddb41e51bf75425f851c (with uncommited changes), branch: master
+Compiled at: 2026-03-07 14:22:39.174278293 UTC
+*/
+
+end
+
+==============================================================================
+summary of summaries:
+
+analyzed: AbsChain3.spthy
+
+  processing time: 468.50s
+  
+  executable_static_task_conformant (exists-trace): verified (28 steps)
+  executable_dynamic_task_conformant (exists-trace): verified (32 steps)
+  AUTH_every_hop_was_delegated (all-traces): verified (461 steps)
+  NOESC_action_within_root_caveat (all-traces): verified (90 steps)
+  ATTR_logged_principal_sent_request (all-traces): falsified - found trace (15 steps)
+  TASK_static_task (all-traces): verified (83 steps)
+  TASK_dynamic_task (all-traces): verified (99 steps)
+
+==============================================================================

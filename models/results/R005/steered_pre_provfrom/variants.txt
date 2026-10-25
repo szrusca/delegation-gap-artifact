@@ -1,0 +1,8 @@
+chain|
+chain+reqbind|-D=REQBIND
+chain+capsule|-D=CAPSULE
+chain+prov|-D=PROV
+chain+reqbind+capsule|-D=REQBIND -D=CAPSULE
+chain+reqbind+prov|-D=REQBIND -D=PROV
+chain+capsule+prov|-D=CAPSULE -D=PROV
+chain+reqbind+capsule+prov|-D=REQBIND -D=CAPSULE -D=PROV

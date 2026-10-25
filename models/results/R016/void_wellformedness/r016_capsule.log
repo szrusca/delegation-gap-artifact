@@ -1,0 +1,2249 @@
+maude tool: 'maude'
+ checking version: 3.5.1. OK.
+ checking installation: OK.
+[Theory MCP_r016_capsule] Theory loaded
+[Theory MCP_r016_capsule] Theory translated
+[Theory MCP_r016_capsule] Theory closed
+[Saturating Sources] Step 1 (Max 5)
+[Saturating Sources] Done
+theory MCP_r016_capsule
+
+begin
+
+// Function signature and definition of the equational theory E
+
+functions: fst/1, h/1, pair/2, pk/1, sign/2, snd/1, true/0, verify/3
+equations:
+    fst(<x.1, x.2>) = x.1,
+    snd(<x.1, x.2>) = x.2,
+    verify(sign(x.1, x.2), x.1, pk(x.2)) = true
+
+restriction Equality:
+  "∀ x y #i. (Eq( x, y ) @ #i) ⇒ (x = y)"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ x y #i. (Eq( x, y ) @ #i) ⇒ (x = y)"
+  */
+
+restriction CaveatPermits:
+  "∀ c a #i.
+    (Check( c, a ) @ #i) ⇒
+    ((c = a) ∨ (∃ op x. (a = <op, x>) ∧ (c = <op, 'any'>)))"
+
+  /*
+  expanded formula:
+  "∀ c a #i.
+    (Check( c, a ) @ #i) ⇒
+    ((c = a) ∨ (∃ op x. (a = <op, x>) ∧ (c = <op, 'any'>)))"
+  */
+
+restriction ConcreteOperand:
+  "∀ op #i. (Act( <op, 'any'> ) @ #i) ⇒ (⊥)"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ op #i. (Act( <op, 'any'> ) @ #i) ⇒ (⊥)"
+  */
+
+restriction UniqueKey:
+  "∀ X #i #j. ((Register( X ) @ #i) ∧ (Register( X ) @ #j)) ⇒ (#i = #j)"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ X #i #j. ((Register( X ) @ #i) ∧ (Register( X ) @ #j)) ⇒ (#i = #j)"
+  */
+
+restriction OneValuePerSourceAndTask:
+  "∀ s t v w #i #j.
+    ((Produced( s, t, v ) @ #i) ∧ (Produced( s, t, w ) @ #j)) ⇒ (#i = #j)"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ s t v w #i #j.
+    ((Produced( s, t, v ) @ #i) ∧ (Produced( s, t, w ) @ #j)) ⇒ (#i = #j)"
+  */
+
+restriction HumanTaskOperandIsConcrete:
+  "∀ H t op #i. (Intends( H, t, <'fixed', op, 'any'> ) @ #i) ⇒ (⊥)"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ H t op #i. (Intends( H, t, <'fixed', op, 'any'> ) @ #i) ⇒ (⊥)"
+  */
+
+restriction OneUpstreamGrantPerUserServerResource:
+  "∀ H M R #i #j.
+    ((UpConsent( H, M, R ) @ #i) ∧ (UpConsent( H, M, R ) @ #j)) ⇒ (#i = #j)"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ H M R #i #j.
+    ((UpConsent( H, M, R ) @ #i) ∧ (UpConsent( H, M, R ) @ #j)) ⇒ (#i = #j)"
+  */
+
+rule (modulo E) Register:
+   [ Fr( ~k ) ]
+  --[ Register( $X ) ]->
+   [ !Ltk( $X, ~k ), !Pk( $X, pk(~k) ), Out( pk(~k) ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Human_authorizes_server_upstream:
+   [ !Ltk( $H, kH ) ]
+  --[ UpConsent( $H, $M, $R ) ]->
+   [ !UpTok( $M, $H, $R ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Human_consents_static:
+   [ Fr( ~tid ), !Ltk( $H, kH ), !Ltk( 'AS', kAS ) ]
+  --[
+  Consent( $H, $C, $M, <'push', 'any'>, ~tid ),
+  Intends( $H, ~tid, <'fixed', 'push', $repo> ), TaskStatic( ~tid )
+  ]->
+   [
+   Out( <<'at', $H, $C, $M, <'push', 'any'>, 'none', ~tid>, 
+         sign(<'at', $H, $C, $M, <'push', 'any'>, 'none', ~tid>, kAS)>
+   ),
+   Out( <<'cap', $H, ~tid, 'fixed', 'push', $repo>, 
+         sign(<'cap', $H, ~tid, 'fixed', 'push', $repo>, kH)>
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Human_consents_dynamic:
+   [ Fr( ~tid ), !Ltk( $H, kH ), !Ltk( 'AS', kAS ) ]
+  --[
+  Consent( $H, $C, $M, <'push', 'any'>, ~tid ),
+  Intends( $H, ~tid, <'hole', 'push', $Src> ), TaskDynamic( ~tid )
+  ]->
+   [
+   Out( <<'at', $H, $C, $M, <'push', 'any'>, 'none', ~tid>, 
+         sign(<'at', $H, $C, $M, <'push', 'any'>, 'none', ~tid>, kAS)>
+   ),
+   !TaskOpen( ~tid, $Src ),
+   Out( <<'cap', $H, ~tid, 'hole', 'push', $Src>, 
+         sign(<'cap', $H, ~tid, 'hole', 'push', $Src>, kH)>
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Human_consents_other:
+   [ Fr( ~tid ), !Ltk( $H, kH ), !Ltk( 'AS', kAS ) ]
+  --[ Consent( $H, $C, $M, <$op, 'any'>, ~tid ), OtherGrant( ~tid ) ]->
+   [
+   Out( <<'at', $H, $C, $M, <$op, 'any'>, 'none', ~tid>, 
+         sign(<'at', $H, $C, $M, <$op, 'any'>, 'none', ~tid>, kAS)>
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Source_produces:
+   [ In( tid ), !Ltk( $Src, ks ) ]
+  --[ Produced( $Src, tid, $v ) ]->
+   [ Out( <<'prov', $Src, tid, $v>, sign(<'prov', $Src, tid, $v>, ks)> ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Agent_calls_tool:
+   [
+   In( <<'at', H, $C, aud, s, cnf, tid>, ts> ), In( <$M, $R, a> ),
+   !Ltk( $C, kC )
+   ]
+  --[ Request( $C, a, tid ) ]->
+   [
+   Out( <'call', a, $M, $R, <'at', H, $C, aud, s, cnf, tid>, ts, 
+         sign(<'dpop', a, $M, h(<<'at', H, $C, aud, s, cnf, tid>, ts>)>, kC)>
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Server_executes_capsule_fixed:
+   [
+   In( <'call', a, $M, $R, <'at', H, C, aud, s, cnf, tid>, ts, pr> ),
+   !Pk( 'AS', pkAS ), !UpTok( $M, H, $R ),
+   In( <<'cap', H, tid, 'fixed', a>, sc> ), !Pk( H, pkH )
+   ]
+  --[
+  Eq( verify(ts, <'at', H, C, aud, s, cnf, tid>, pkAS), true ), Act( a ),
+  Eq( aud, $M ), Check( s, a ),
+  Eq( verify(sc, <'cap', H, tid, 'fixed', a>, pkH), true ),
+  ToolExec( $M, H, C, a, tid )
+  ]->
+   [ UpReq( $M, $R, H, C, a, tid ) ]
+
+  /*
+  rule (modulo AC) Server_executes_capsule_fixed:
+     [
+     In( <'call', a, $M, $R, <'at', H, C, aud, s, cnf, tid>, ts, pr> ),
+     !Pk( 'AS', pkAS ), !UpTok( $M, H, $R ),
+     In( <<'cap', H, tid, 'fixed', a>, sc> ), !Pk( H, pkH )
+     ]
+    --[
+    Eq( z, true ), Act( a ), Eq( aud, $M ), Check( s, a ), Eq( z.1, true ),
+    ToolExec( $M, H, C, a, tid )
+    ]->
+     [ UpReq( $M, $R, H, C, a, tid ) ]
+    variants (modulo AC)
+    1. C     = C.34
+       H     = H.35
+       a     = a.36
+       aud   = aud.37
+       cnf   = cnf.38
+       pkAS  = pkAS.39
+       pkH   = pkH.40
+       s     = s.42
+       sc    = sc.43
+       tid   = tid.44
+       ts    = ts.45
+       z     = verify(ts.45, <'at', H.35, C.34, aud.37, s.42, cnf.38, tid.44>,
+                      pkAS.39)
+       z.1   = verify(sc.43, <'cap', H.35, tid.44, 'fixed', a.36>, pkH.40)
+    
+    2. C     = C.104
+       H     = H.105
+       a     = a.106
+       aud   = aud.107
+       cnf   = cnf.108
+       pkAS  = pkAS.109
+       pkH   = pk(x.204)
+       s     = s.112
+       sc    = sign(<'cap', H.105, tid.114, 'fixed', a.106>, x.204)
+       tid   = tid.114
+       ts    = ts.115
+       z     = verify(ts.115,
+                      <'at', H.105, C.104, aud.107, s.112, cnf.108, tid.114>, pkAS.109)
+       z.1   = true
+    
+    3. C     = C.104
+       H     = H.105
+       a     = a.106
+       aud   = aud.107
+       cnf   = cnf.108
+       pkAS  = pk(x.204)
+       pkH   = pkH.110
+       s     = s.112
+       sc    = sc.113
+       tid   = tid.114
+       ts    = sign(<'at', H.105, C.104, aud.107, s.112, cnf.108, tid.114>,
+                    x.204)
+       z     = true
+       z.1   = verify(sc.113, <'cap', H.105, tid.114, 'fixed', a.106>, pkH.110)
+    
+    4. C     = C.105
+       H     = H.106
+       a     = a.107
+       aud   = aud.108
+       cnf   = cnf.109
+       pkAS  = pk(x.205)
+       pkH   = pk(x.206)
+       s     = s.113
+       sc    = sign(<'cap', H.106, tid.115, 'fixed', a.107>, x.206)
+       tid   = tid.115
+       ts    = sign(<'at', H.106, C.105, aud.108, s.113, cnf.109, tid.115>,
+                    x.205)
+       z     = true
+       z.1   = true
+  */
+
+rule (modulo E) Server_executes_capsule_hole_unchecked:
+   [
+   In( <'call', <op, v>, $M, $R, <'at', H, C, aud, s, cnf, tid>, ts, pr> ),
+   !Pk( 'AS', pkAS ), !UpTok( $M, H, $R ),
+   In( <<'cap', H, tid, 'hole', op, S>, sc> ), !Pk( H, pkH )
+   ]
+  --[
+  Eq( verify(ts, <'at', H, C, aud, s, cnf, tid>, pkAS), true ),
+  Act( <op, v> ), Eq( aud, $M ), Check( s, <op, v> ),
+  Eq( verify(sc, <'cap', H, tid, 'hole', op, S>, pkH), true ),
+  ToolExec( $M, H, C, <op, v>, tid )
+  ]->
+   [ UpReq( $M, $R, H, C, <op, v>, tid ) ]
+
+  /*
+  rule (modulo AC) Server_executes_capsule_hole_unchecked:
+     [
+     In( <'call', <op, v>, $M, $R, <'at', H, C, aud, s, cnf, tid>, ts, pr> ),
+     !Pk( 'AS', pkAS ), !UpTok( $M, H, $R ),
+     In( <<'cap', H, tid, 'hole', op, S>, sc> ), !Pk( H, pkH )
+     ]
+    --[
+    Eq( z, true ), Act( <op, v> ), Eq( aud, $M ), Check( s, <op, v> ),
+    Eq( z.1, true ), ToolExec( $M, H, C, <op, v>, tid )
+    ]->
+     [ UpReq( $M, $R, H, C, <op, v>, tid ) ]
+    variants (modulo AC)
+    1. C     = C.37
+       H     = H.38
+       S     = S.39
+       aud   = aud.40
+       cnf   = cnf.41
+       op    = op.42
+       pkAS  = pkAS.43
+       pkH   = pkH.44
+       s     = s.46
+       sc    = sc.47
+       tid   = tid.48
+       ts    = ts.49
+       z     = verify(ts.49, <'at', H.38, C.37, aud.40, s.46, cnf.41, tid.48>,
+                      pkAS.43)
+       z.1   = verify(sc.47, <'cap', H.38, tid.48, 'hole', op.42, S.39>, pkH.44)
+    
+    2. C     = C.115
+       H     = H.116
+       S     = S.117
+       aud   = aud.118
+       cnf   = cnf.119
+       op    = op.120
+       pkAS  = pkAS.121
+       pkH   = pk(x.226)
+       s     = s.124
+       sc    = sign(<'cap', H.116, tid.126, 'hole', op.120, S.117>, x.226)
+       tid   = tid.126
+       ts    = ts.127
+       z     = verify(ts.127,
+                      <'at', H.116, C.115, aud.118, s.124, cnf.119, tid.126>, pkAS.121)
+       z.1   = true
+    
+    3. C     = C.115
+       H     = H.116
+       S     = S.117
+       aud   = aud.118
+       cnf   = cnf.119
+       op    = op.120
+       pkAS  = pk(x.226)
+       pkH   = pkH.122
+       s     = s.124
+       sc    = sc.125
+       tid   = tid.126
+       ts    = sign(<'at', H.116, C.115, aud.118, s.124, cnf.119, tid.126>,
+                    x.226)
+       z     = true
+       z.1   = verify(sc.125, <'cap', H.116, tid.126, 'hole', op.120, S.117>,
+                      pkH.122)
+    
+    4. C     = C.116
+       H     = H.117
+       S     = S.118
+       aud   = aud.119
+       cnf   = cnf.120
+       op    = op.121
+       pkAS  = pk(x.227)
+       pkH   = pk(x.228)
+       s     = s.125
+       sc    = sign(<'cap', H.117, tid.127, 'hole', op.121, S.118>, x.228)
+       tid   = tid.127
+       ts    = sign(<'at', H.117, C.116, aud.119, s.125, cnf.120, tid.127>,
+                    x.227)
+       z     = true
+       z.1   = true
+  */
+
+rule (modulo E) Resource_accepts_upstream_call:
+   [ UpReq( M, R, H, C, a, tid ) ]
+  --[ Accept( R, H, M, a, tid ), ViaServer( R, M, a, tid ) ]->
+   [ ]
+
+  /* has exactly the trivial AC variant */
+
+lemma executable_static_task_conformant:
+  exists-trace
+  "∃ R H L a tid #i #j #k.
+    ((Accept( R, H, L, a, tid ) @ #i) ∧ (TaskStatic( tid ) @ #j)) ∧
+    (Intends( H, tid, <'fixed', a> ) @ #k)"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ R H L a tid #i #j #k.
+  (Accept( R, H, L, a, tid ) @ #i) ∧
+  (TaskStatic( tid ) @ #j) ∧
+  (Intends( H, tid, <'fixed', a> ) @ #k)"
+*/
+simplify
+solve( UpReq( L, R, H, C, a, ~tid ) ▶₀ #i )
+  case Server_executes_capsule_fixed
+  solve( (s = a)  ∥ (∃ op x. (a = <op, x>) ∧ (s = <op, 'any'>)) )
+    case case_2
+    solve( !Ltk( $H.1, kH ) ▶₁ #j )
+      case Register
+      solve( !Ltk( 'AS', kAS ) ▶₂ #j )
+        case Register
+        solve( Intends( $H, ~tid, <'fixed', op, x> ) @ #k.4 )
+          case Human_consents_static
+          solve( !KU( sign(<'at', $H, C, $M, <'push', 'any'>, cnf, ~tid>, ~k.1)
+                 ) @ #vk.27 )
+            case Human_consents_static
+            solve( !KU( ~tid ) @ #vk.26 )
+              case Human_consents_static_case_1
+              solve( !KU( sign(<'cap', $H, ~tid, 'fixed', 'push', $repo>, ~k)
+                     ) @ #vk.31 )
+                case Human_consents_static
+                SOLVED // trace found
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma executable_dynamic_task_conformant:
+  exists-trace
+  "∃ R H L op v S tid #i #k #l.
+    ((Accept( R, H, L, <op, v>, tid ) @ #i) ∧
+     (Intends( H, tid, <'hole', op, S> ) @ #k)) ∧
+    (Produced( S, tid, v ) @ #l)"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ R H L op v S tid #i #k #l.
+  (Accept( R, H, L, <op, v>, tid ) @ #i) ∧
+  (Intends( H, tid, <'hole', op, S> ) @ #k) ∧
+  (Produced( S, tid, v ) @ #l)"
+*/
+simplify
+solve( UpReq( L, R, H, C, <op, $v>, tid ) ▶₀ #i )
+  case Server_executes_capsule_hole_unchecked
+  solve( (s = <op, $v>)  ∥
+         (∃ op.1 x. (<op, $v> = <op.1, x>) ∧ (s = <op.1, 'any'>)) )
+    case case_2
+    solve( !Ltk( $Src, ks ) ▶₁ #l )
+      case Register
+      solve( Intends( $H, tid, <'hole', op, $Src> ) @ #k.3 )
+        case Human_consents_dynamic
+        solve( !Ltk( $H, kH ) ▶₁ #k.3 )
+          case Register
+          solve( !Ltk( 'AS', kAS ) ▶₂ #k.3 )
+            case Register
+            solve( !KU( sign(<'at', $H, C, $M, <'push', 'any'>, cnf, ~tid>, ~k.1)
+                   ) @ #vk.30 )
+              case Human_consents_dynamic
+              solve( !KU( sign(<'cap', $H, ~tid, 'hole', 'push', S>, ~k.2) ) @ #vk.35 )
+                case Human_consents_dynamic
+                solve( !KU( ~tid ) @ #vk.3 )
+                  case Human_consents_dynamic_case_1
+                  SOLVED // trace found
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma witness_cross_server_token_replay:
+  exists-trace
+  "∃ M M2 H C a s tid #i #j.
+    ((ToolExec( M, H, C, a, tid ) @ #i) ∧
+     (Consent( H, C, M2, s, tid ) @ #j)) ∧
+    (¬(M = M2))"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ M M2 H C a s tid #i #j.
+  (ToolExec( M, H, C, a, tid ) @ #i) ∧ (Consent( H, C, M2, s, tid ) @ #j)
+ ∧
+  ¬(M = M2)"
+*/
+simplify
+solve( ToolExec( M, H, C, a, tid ) @ #i )
+  case Server_executes_capsule_fixed
+  solve( (s = a)  ∥ (∃ op x. (a = <op, x>) ∧ (s = <op, 'any'>)) )
+    case case_1
+    solve( !Pk( 'AS', pk(x) ) ▶₁ #i )
+      case Register
+      solve( !UpTok( $M, H, $R ) ▶₂ #i )
+        case Human_authorizes_server_upstream
+        solve( !Pk( $H, pk(x) ) ▶₄ #i )
+          case Register
+          solve( Consent( $H, C, M2, s, tid ) @ #j )
+            case Human_consents_dynamic
+            solve( !Ltk( $H, kH ) ▶₁ #j )
+              case Register
+              solve( !Ltk( 'AS', kAS ) ▶₂ #j )
+                case Register
+                solve( !KU( sign(<'at', $H, $C, $M, a, cnf, ~tid>, ~k) ) @ #vk.26 )
+                  case Human_consents_dynamic
+                  by contradiction /* from formulas */
+                next
+                  case c_sign
+                  by solve( !KU( ~k ) @ #vk.31 )
+                qed
+              qed
+            qed
+          next
+            case Human_consents_other
+            solve( !Ltk( $H, kH ) ▶₁ #j )
+              case Register
+              solve( !Ltk( 'AS', kAS ) ▶₂ #j )
+                case Register
+                solve( !KU( sign(<'at', $H, $C, $M, a, cnf, ~tid>, ~k) ) @ #vk.26 )
+                  case Human_consents_other
+                  by contradiction /* from formulas */
+                next
+                  case c_sign
+                  by solve( !KU( ~k ) @ #vk.31 )
+                qed
+              qed
+            qed
+          next
+            case Human_consents_static
+            solve( !Ltk( $H, kH ) ▶₁ #j )
+              case Register
+              solve( !Ltk( 'AS', kAS ) ▶₂ #j )
+                case Register
+                solve( !KU( sign(<'at', $H, $C, $M, a, cnf, ~tid>, ~k) ) @ #vk.26 )
+                  case Human_consents_static
+                  by contradiction /* from formulas */
+                next
+                  case c_sign
+                  by solve( !KU( ~k ) @ #vk.31 )
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  next
+    case case_2
+    solve( !Pk( 'AS', pk(x.1) ) ▶₁ #i )
+      case Register
+      solve( !UpTok( $M, H, $R ) ▶₂ #i )
+        case Human_authorizes_server_upstream
+        solve( !Pk( $H, pk(x.1) ) ▶₄ #i )
+          case Register
+          solve( Consent( $H, C, M2, s, tid ) @ #j )
+            case Human_consents_dynamic
+            solve( !Ltk( $H, kH ) ▶₁ #j )
+              case Register
+              solve( !Ltk( 'AS', kAS ) ▶₂ #j )
+                case Register
+                solve( !KU( sign(<'at', $H, $C, $M, <op, 'any'>, cnf, ~tid>, ~k)
+                       ) @ #vk.27 )
+                  case Human_consents_dynamic
+                  by contradiction /* from formulas */
+                next
+                  case c_sign
+                  by solve( !KU( ~k ) @ #vk.35 )
+                qed
+              qed
+            qed
+          next
+            case Human_consents_other
+            solve( !Ltk( $H, kH ) ▶₁ #j )
+              case Register
+              solve( !Ltk( 'AS', kAS ) ▶₂ #j )
+                case Register
+                solve( !KU( sign(<'at', $H, $C, $M, <op, 'any'>, cnf, ~tid>, ~k)
+                       ) @ #vk.27 )
+                  case Human_consents_other
+                  by contradiction /* from formulas */
+                next
+                  case c_sign
+                  by solve( !KU( ~k ) @ #vk.35 )
+                qed
+              qed
+            qed
+          next
+            case Human_consents_static
+            solve( !Ltk( $H, kH ) ▶₁ #j )
+              case Register
+              solve( !Ltk( 'AS', kAS ) ▶₂ #j )
+                case Register
+                solve( !KU( sign(<'at', $H, $C, $M, <op, 'any'>, cnf, ~tid>, ~k)
+                       ) @ #vk.27 )
+                  case Human_consents_static
+                  by contradiction /* from formulas */
+                next
+                  case c_sign
+                  by solve( !KU( ~k ) @ #vk.35 )
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+next
+  case Server_executes_capsule_hole_unchecked
+  solve( (s = <op, v>)  ∥
+         (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (s = <op.1, 'any'>)) )
+    case case_1
+    solve( !Pk( 'AS', pk(x) ) ▶₁ #i )
+      case Register
+      solve( !UpTok( $M, H, $R ) ▶₂ #i )
+        case Human_authorizes_server_upstream
+        solve( !Pk( $H, pk(x) ) ▶₄ #i )
+          case Register
+          solve( Consent( $H, C, M2, s, tid ) @ #j )
+            case Human_consents_dynamic
+            solve( !Ltk( $H, kH ) ▶₁ #j )
+              case Register
+              solve( !Ltk( 'AS', kAS ) ▶₂ #j )
+                case Register
+                solve( !KU( sign(<'at', $H, $C, $M, <op, v>, cnf, ~tid>, ~k) ) @ #vk.29 )
+                  case Human_consents_dynamic
+                  by contradiction /* from formulas */
+                next
+                  case c_sign
+                  by solve( !KU( ~k ) @ #vk.35 )
+                qed
+              qed
+            qed
+          next
+            case Human_consents_other
+            solve( !Ltk( $H, kH ) ▶₁ #j )
+              case Register
+              solve( !Ltk( 'AS', kAS ) ▶₂ #j )
+                case Register
+                solve( !KU( sign(<'at', $H, $C, $M, <op, v>, cnf, ~tid>, ~k) ) @ #vk.29 )
+                  case Human_consents_other
+                  by contradiction /* from formulas */
+                next
+                  case c_sign
+                  by solve( !KU( ~k ) @ #vk.35 )
+                qed
+              qed
+            qed
+          next
+            case Human_consents_static
+            solve( !Ltk( $H, kH ) ▶₁ #j )
+              case Register
+              solve( !Ltk( 'AS', kAS ) ▶₂ #j )
+                case Register
+                solve( !KU( sign(<'at', $H, $C, $M, <op, v>, cnf, ~tid>, ~k) ) @ #vk.29 )
+                  case Human_consents_static
+                  by contradiction /* from formulas */
+                next
+                  case c_sign
+                  by solve( !KU( ~k ) @ #vk.35 )
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  next
+    case case_2
+    solve( !Pk( 'AS', pk(x) ) ▶₁ #i )
+      case Register
+      solve( !UpTok( $M, H, $R ) ▶₂ #i )
+        case Human_authorizes_server_upstream
+        solve( !Pk( $H, pk(x) ) ▶₄ #i )
+          case Register
+          solve( Consent( $H, C, M2, s, tid ) @ #j )
+            case Human_consents_dynamic
+            solve( !Ltk( $H, kH ) ▶₁ #j )
+              case Register
+              solve( !Ltk( 'AS', kAS ) ▶₂ #j )
+                case Register
+                solve( !KU( sign(<'at', $H, $C, $M, <op, 'any'>, cnf, ~tid>, ~k)
+                       ) @ #vk.30 )
+                  case Human_consents_dynamic
+                  by contradiction /* from formulas */
+                next
+                  case c_sign
+                  by solve( !KU( ~k ) @ #vk.37 )
+                qed
+              qed
+            qed
+          next
+            case Human_consents_other
+            solve( !Ltk( $H, kH ) ▶₁ #j )
+              case Register
+              solve( !Ltk( 'AS', kAS ) ▶₂ #j )
+                case Register
+                solve( !KU( sign(<'at', $H, $C, $M, <op, 'any'>, cnf, ~tid>, ~k)
+                       ) @ #vk.30 )
+                  case Human_consents_other
+                  by contradiction /* from formulas */
+                next
+                  case c_sign
+                  by solve( !KU( ~k ) @ #vk.37 )
+                qed
+              qed
+            qed
+          next
+            case Human_consents_static
+            solve( !Ltk( $H, kH ) ▶₁ #j )
+              case Register
+              solve( !Ltk( 'AS', kAS ) ▶₂ #j )
+                case Register
+                solve( !KU( sign(<'at', $H, $C, $M, <op, 'any'>, cnf, ~tid>, ~k)
+                       ) @ #vk.30 )
+                  case Human_consents_static
+                  by contradiction /* from formulas */
+                next
+                  case c_sign
+                  by solve( !KU( ~k ) @ #vk.37 )
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma witness_scope_escalation_via_upstream_token:
+  exists-trace
+  "∃ R M H L C a s tid #i #k #j.
+    (((((Accept( R, H, L, a, tid ) @ #i) ∧
+        (ViaServer( R, M, a, tid ) @ #i)) ∧
+       (ToolExec( M, H, C, a, tid ) @ #k)) ∧
+      (Consent( H, C, M, s, tid ) @ #j)) ∧
+     (¬(s = a))) ∧
+    (¬(∃ op x. (a = <op, x>) ∧ (s = <op, 'any'>)))"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ R M H L C a s tid #i #k #j.
+  (Accept( R, H, L, a, tid ) @ #i) ∧
+  (ViaServer( R, M, a, tid ) @ #i) ∧
+  (ToolExec( M, H, C, a, tid ) @ #k) ∧
+  (Consent( H, C, M, s, tid ) @ #j)
+ ∧
+  (¬(s = a)) ∧ (∀ op x. (a = <op, x>) ∧ (s = <op, 'any'>) ⇒ ⊥)"
+*/
+simplify
+solve( UpReq( M, R, H, C, a, tid ) ▶₀ #i )
+  case Server_executes_capsule_fixed
+  solve( (s = a)  ∥ (∃ op x. (a = <op, x>) ∧ (s = <op, 'any'>)) )
+    case case_1
+    solve( ToolExec( $M, $H, C.1, a, tid ) @ #k.2 )
+      case Server_executes_capsule_fixed
+      solve( (s = a)  ∥ (∃ op x. (a = <op, x>) ∧ (s = <op, 'any'>)) )
+        case case_1
+        solve( !Pk( 'AS', pk(x) ) ▶₁ #k.2 )
+          case Register
+          solve( !UpTok( $M, $H, $R.1 ) ▶₂ #k.2 )
+            case Human_authorizes_server_upstream
+            solve( !Pk( $H, pk(x) ) ▶₄ #k.2 )
+              case Register
+              solve( Consent( $H, C.1, $M, s, tid ) @ #j )
+                case Human_consents_dynamic
+                solve( !Ltk( $H, kH ) ▶₁ #j )
+                  case Register
+                  solve( !Ltk( 'AS', kAS ) ▶₂ #j )
+                    case Register
+                    solve( !KU( sign(<'at', $H, C, $M, a, cnf, ~tid>, ~k.1) ) @ #vk.37 )
+                      case Human_consents_dynamic
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      by solve( !KU( ~k.1 ) @ #vk.48 )
+                    qed
+                  qed
+                qed
+              next
+                case Human_consents_other
+                solve( !Ltk( $H, kH ) ▶₁ #j )
+                  case Register
+                  solve( !Ltk( 'AS', kAS ) ▶₂ #j )
+                    case Register
+                    solve( !KU( sign(<'at', $H, C, $M, a, cnf, ~tid>, ~k.1) ) @ #vk.37 )
+                      case Human_consents_other
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      by solve( !KU( ~k.1 ) @ #vk.48 )
+                    qed
+                  qed
+                qed
+              next
+                case Human_consents_static
+                solve( !Ltk( $H, kH ) ▶₁ #j )
+                  case Register
+                  solve( !Ltk( 'AS', kAS ) ▶₂ #j )
+                    case Register
+                    solve( !KU( sign(<'at', $H, C, $M, a, cnf, ~tid>, ~k.1) ) @ #vk.37 )
+                      case Human_consents_static
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      by solve( !KU( ~k.1 ) @ #vk.48 )
+                    qed
+                  qed
+                qed
+              qed
+            qed
+          qed
+        qed
+      next
+        case case_2
+        solve( !Pk( 'AS', pk(x.1) ) ▶₁ #k.2 )
+          case Register
+          solve( !UpTok( $M, $H, $R.1 ) ▶₂ #k.2 )
+            case Human_authorizes_server_upstream
+            solve( !Pk( $H, pk(x.1) ) ▶₄ #k.2 )
+              case Register
+              solve( Consent( $H, C.1, $M, s, tid ) @ #j )
+                case Human_consents_dynamic
+                solve( !Ltk( $H, kH ) ▶₁ #j )
+                  case Register
+                  solve( !Ltk( 'AS', kAS ) ▶₂ #j )
+                    case Register
+                    solve( !KU( sign(<'at', $H, C, $M, <op, x>, cnf, ~tid>, ~k.1)
+                           ) @ #vk.37 )
+                      case Human_consents_dynamic
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      by solve( !KU( ~k.1 ) @ #vk.52 )
+                    qed
+                  qed
+                qed
+              next
+                case Human_consents_other
+                solve( !Ltk( $H, kH ) ▶₁ #j )
+                  case Register
+                  solve( !Ltk( 'AS', kAS ) ▶₂ #j )
+                    case Register
+                    solve( !KU( sign(<'at', $H, C, $M, <op, x>, cnf, ~tid>, ~k.1)
+                           ) @ #vk.37 )
+                      case Human_consents_other
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      by solve( !KU( ~k.1 ) @ #vk.52 )
+                    qed
+                  qed
+                qed
+              next
+                case Human_consents_static
+                solve( !Ltk( $H, kH ) ▶₁ #j )
+                  case Register
+                  solve( !Ltk( 'AS', kAS ) ▶₂ #j )
+                    case Register
+                    solve( !KU( sign(<'at', $H, C, $M, <op, x>, cnf, ~tid>, ~k.1)
+                           ) @ #vk.37 )
+                      case Human_consents_static
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      by solve( !KU( ~k.1 ) @ #vk.52 )
+                    qed
+                  qed
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    next
+      case Server_executes_capsule_hole_unchecked
+      solve( (s = <op, v>)  ∥
+             (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (s = <op.1, 'any'>)) )
+        case case_1
+        solve( !Pk( 'AS', pk(x) ) ▶₁ #k.2 )
+          case Register
+          solve( !UpTok( $M, $H, $R.1 ) ▶₂ #k.2 )
+            case Human_authorizes_server_upstream
+            solve( !Pk( $H, pk(x) ) ▶₄ #k.2 )
+              case Register
+              solve( Consent( $H, C.1, $M, s, tid ) @ #j )
+                case Human_consents_dynamic
+                solve( !Ltk( $H, kH ) ▶₁ #j )
+                  case Register
+                  solve( !Ltk( 'AS', kAS ) ▶₂ #j )
+                    case Register
+                    solve( !KU( sign(<'at', $H, C, $M, <op, v>, cnf, ~tid>, ~k.1)
+                           ) @ #vk.41 )
+                      case Human_consents_dynamic
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      by solve( !KU( ~k.1 ) @ #vk.59 )
+                    qed
+                  qed
+                qed
+              next
+                case Human_consents_other
+                solve( !Ltk( $H, kH ) ▶₁ #j )
+                  case Register
+                  solve( !Ltk( 'AS', kAS ) ▶₂ #j )
+                    case Register
+                    solve( !KU( sign(<'at', $H, C, $M, <op, v>, cnf, ~tid>, ~k.1)
+                           ) @ #vk.41 )
+                      case Human_consents_other
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      by solve( !KU( ~k.1 ) @ #vk.59 )
+                    qed
+                  qed
+                qed
+              next
+                case Human_consents_static
+                solve( !Ltk( $H, kH ) ▶₁ #j )
+                  case Register
+                  solve( !Ltk( 'AS', kAS ) ▶₂ #j )
+                    case Register
+                    solve( !KU( sign(<'at', $H, C, $M, <op, v>, cnf, ~tid>, ~k.1)
+                           ) @ #vk.41 )
+                      case Human_consents_static
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      by solve( !KU( ~k.1 ) @ #vk.59 )
+                    qed
+                  qed
+                qed
+              qed
+            qed
+          qed
+        qed
+      next
+        case case_2
+        solve( !Pk( 'AS', pk(x) ) ▶₁ #k.2 )
+          case Register
+          solve( !UpTok( $M, $H, $R.1 ) ▶₂ #k.2 )
+            case Human_authorizes_server_upstream
+            solve( !Pk( $H, pk(x) ) ▶₄ #k.2 )
+              case Register
+              solve( Consent( $H, C.1, $M, s, tid ) @ #j )
+                case Human_consents_dynamic
+                solve( !Ltk( $H, kH ) ▶₁ #j )
+                  case Register
+                  solve( !Ltk( 'AS', kAS ) ▶₂ #j )
+                    case Register
+                    solve( !KU( sign(<'at', $H, C, $M, <op, v>, cnf, ~tid>, ~k.1)
+                           ) @ #vk.41 )
+                      case Human_consents_dynamic
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      by solve( !KU( ~k.1 ) @ #vk.61 )
+                    qed
+                  qed
+                qed
+              next
+                case Human_consents_other
+                solve( !Ltk( $H, kH ) ▶₁ #j )
+                  case Register
+                  solve( !Ltk( 'AS', kAS ) ▶₂ #j )
+                    case Register
+                    solve( !KU( sign(<'at', $H, C, $M, <op, v>, cnf, ~tid>, ~k.1)
+                           ) @ #vk.41 )
+                      case Human_consents_other
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      by solve( !KU( ~k.1 ) @ #vk.61 )
+                    qed
+                  qed
+                qed
+              next
+                case Human_consents_static
+                solve( !Ltk( $H, kH ) ▶₁ #j )
+                  case Register
+                  solve( !Ltk( 'AS', kAS ) ▶₂ #j )
+                    case Register
+                    solve( !KU( sign(<'at', $H, C, $M, <op, v>, cnf, ~tid>, ~k.1)
+                           ) @ #vk.41 )
+                      case Human_consents_static
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      by solve( !KU( ~k.1 ) @ #vk.61 )
+                    qed
+                  qed
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  next
+    case case_2
+    solve( ToolExec( $M, $H, C.1, <op, x>, tid ) @ #k.2 )
+      case Server_executes_capsule_fixed
+      solve( (s = <op, x>)  ∥
+             (∃ op.1 x.1. (<op, x> = <op.1, x.1>) ∧ (s = <op.1, 'any'>)) )
+        case case_1
+        solve( !Pk( 'AS', pk(x.1) ) ▶₁ #k.2 )
+          case Register
+          solve( !UpTok( $M, $H, $R.1 ) ▶₂ #k.2 )
+            case Human_authorizes_server_upstream
+            solve( !Pk( $H, pk(x.1) ) ▶₄ #k.2 )
+              case Register
+              solve( Consent( $H, C.1, $M, s, tid ) @ #j )
+                case Human_consents_dynamic
+                solve( !Ltk( $H, kH ) ▶₁ #j )
+                  case Register
+                  solve( !Ltk( 'AS', kAS ) ▶₂ #j )
+                    case Register
+                    solve( !KU( sign(<'at', $H, C, $M, <op, 'any'>, cnf, ~tid>, ~k.1)
+                           ) @ #vk.38 )
+                      case Human_consents_dynamic
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      by solve( !KU( ~k.1 ) @ #vk.52 )
+                    qed
+                  qed
+                qed
+              next
+                case Human_consents_other
+                solve( !Ltk( $H, kH ) ▶₁ #j )
+                  case Register
+                  solve( !Ltk( 'AS', kAS ) ▶₂ #j )
+                    case Register
+                    solve( !KU( sign(<'at', $H, C, $M, <op, 'any'>, cnf, ~tid>, ~k.1)
+                           ) @ #vk.38 )
+                      case Human_consents_other
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      by solve( !KU( ~k.1 ) @ #vk.52 )
+                    qed
+                  qed
+                qed
+              next
+                case Human_consents_static
+                solve( !Ltk( $H, kH ) ▶₁ #j )
+                  case Register
+                  solve( !Ltk( 'AS', kAS ) ▶₂ #j )
+                    case Register
+                    solve( !KU( sign(<'at', $H, C, $M, <op, 'any'>, cnf, ~tid>, ~k.1)
+                           ) @ #vk.38 )
+                      case Human_consents_static
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      by solve( !KU( ~k.1 ) @ #vk.52 )
+                    qed
+                  qed
+                qed
+              qed
+            qed
+          qed
+        qed
+      next
+        case case_2
+        solve( !Pk( 'AS', pk(x.1) ) ▶₁ #k.2 )
+          case Register
+          solve( !UpTok( $M, $H, $R.1 ) ▶₂ #k.2 )
+            case Human_authorizes_server_upstream
+            solve( !Pk( $H, pk(x.1) ) ▶₄ #k.2 )
+              case Register
+              solve( Consent( $H, C.1, $M, s, tid ) @ #j )
+                case Human_consents_dynamic
+                solve( !Ltk( $H, kH ) ▶₁ #j )
+                  case Register
+                  solve( !Ltk( 'AS', kAS ) ▶₂ #j )
+                    case Register
+                    solve( !KU( sign(<'at', $H, C, $M, <op, 'any'>, cnf, ~tid>, ~k.1)
+                           ) @ #vk.38 )
+                      case Human_consents_dynamic
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      by solve( !KU( ~k.1 ) @ #vk.52 )
+                    qed
+                  qed
+                qed
+              next
+                case Human_consents_other
+                solve( !Ltk( $H, kH ) ▶₁ #j )
+                  case Register
+                  solve( !Ltk( 'AS', kAS ) ▶₂ #j )
+                    case Register
+                    solve( !KU( sign(<'at', $H, C, $M, <op, 'any'>, cnf, ~tid>, ~k.1)
+                           ) @ #vk.38 )
+                      case Human_consents_other
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      by solve( !KU( ~k.1 ) @ #vk.52 )
+                    qed
+                  qed
+                qed
+              next
+                case Human_consents_static
+                solve( !Ltk( $H, kH ) ▶₁ #j )
+                  case Register
+                  solve( !Ltk( 'AS', kAS ) ▶₂ #j )
+                    case Register
+                    solve( !KU( sign(<'at', $H, C, $M, <op, 'any'>, cnf, ~tid>, ~k.1)
+                           ) @ #vk.38 )
+                      case Human_consents_static
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      by solve( !KU( ~k.1 ) @ #vk.52 )
+                    qed
+                  qed
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    next
+      case Server_executes_capsule_hole_unchecked
+      solve( (s = <op, x>)  ∥
+             (∃ op.1 x.1. (<op, x> = <op.1, x.1>) ∧ (s = <op.1, 'any'>)) )
+        case case_1
+        solve( !Pk( 'AS', pk(x.1) ) ▶₁ #k.2 )
+          case Register
+          solve( !UpTok( $M, $H, $R.1 ) ▶₂ #k.2 )
+            case Human_authorizes_server_upstream
+            solve( !Pk( $H, pk(x.1) ) ▶₄ #k.2 )
+              case Register
+              solve( Consent( $H, C.1, $M, s, tid ) @ #j )
+                case Human_consents_dynamic
+                solve( !Ltk( $H, kH ) ▶₁ #j )
+                  case Register
+                  solve( !Ltk( 'AS', kAS ) ▶₂ #j )
+                    case Register
+                    solve( !KU( sign(<'at', $H, C, $M, <op, 'any'>, cnf, ~tid>, ~k.1)
+                           ) @ #vk.42 )
+                      case Human_consents_dynamic
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      by solve( !KU( ~k.1 ) @ #vk.61 )
+                    qed
+                  qed
+                qed
+              next
+                case Human_consents_other
+                solve( !Ltk( $H, kH ) ▶₁ #j )
+                  case Register
+                  solve( !Ltk( 'AS', kAS ) ▶₂ #j )
+                    case Register
+                    solve( !KU( sign(<'at', $H, C, $M, <op, 'any'>, cnf, ~tid>, ~k.1)
+                           ) @ #vk.42 )
+                      case Human_consents_other
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      by solve( !KU( ~k.1 ) @ #vk.61 )
+                    qed
+                  qed
+                qed
+              next
+                case Human_consents_static
+                solve( !Ltk( $H, kH ) ▶₁ #j )
+                  case Register
+                  solve( !Ltk( 'AS', kAS ) ▶₂ #j )
+                    case Register
+                    solve( !KU( sign(<'at', $H, C, $M, <op, 'any'>, cnf, ~tid>, ~k.1)
+                           ) @ #vk.42 )
+                      case Human_consents_static
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      by solve( !KU( ~k.1 ) @ #vk.61 )
+                    qed
+                  qed
+                qed
+              qed
+            qed
+          qed
+        qed
+      next
+        case case_2
+        solve( !Pk( 'AS', pk(x.1) ) ▶₁ #k.2 )
+          case Register
+          solve( !UpTok( $M, $H, $R.1 ) ▶₂ #k.2 )
+            case Human_authorizes_server_upstream
+            solve( !Pk( $H, pk(x.1) ) ▶₄ #k.2 )
+              case Register
+              solve( Consent( $H, C.1, $M, s, tid ) @ #j )
+                case Human_consents_dynamic
+                solve( !Ltk( $H, kH ) ▶₁ #j )
+                  case Register
+                  solve( !Ltk( 'AS', kAS ) ▶₂ #j )
+                    case Register
+                    solve( !KU( sign(<'at', $H, C, $M, <op, 'any'>, cnf, ~tid>, ~k.1)
+                           ) @ #vk.42 )
+                      case Human_consents_dynamic
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      by solve( !KU( ~k.1 ) @ #vk.61 )
+                    qed
+                  qed
+                qed
+              next
+                case Human_consents_other
+                solve( !Ltk( $H, kH ) ▶₁ #j )
+                  case Register
+                  solve( !Ltk( 'AS', kAS ) ▶₂ #j )
+                    case Register
+                    solve( !KU( sign(<'at', $H, C, $M, <op, 'any'>, cnf, ~tid>, ~k.1)
+                           ) @ #vk.42 )
+                      case Human_consents_other
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      by solve( !KU( ~k.1 ) @ #vk.61 )
+                    qed
+                  qed
+                qed
+              next
+                case Human_consents_static
+                solve( !Ltk( $H, kH ) ▶₁ #j )
+                  case Register
+                  solve( !Ltk( 'AS', kAS ) ▶₂ #j )
+                    case Register
+                    solve( !KU( sign(<'at', $H, C, $M, <op, 'any'>, cnf, ~tid>, ~k.1)
+                           ) @ #vk.42 )
+                      case Human_consents_static
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      by solve( !KU( ~k.1 ) @ #vk.61 )
+                    qed
+                  qed
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+next
+  case Server_executes_capsule_hole_unchecked
+  solve( (s = <op, v>)  ∥
+         (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (s = <op.1, 'any'>)) )
+    case case_1
+    solve( ToolExec( $M, $H, C.1, <op, v>, tid ) @ #k.2 )
+      case Server_executes_capsule_fixed
+      solve( (s = <op, v>)  ∥
+             (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (s = <op.1, 'any'>)) )
+        case case_1
+        solve( !Pk( 'AS', pk(x) ) ▶₁ #k.2 )
+          case Register
+          solve( !UpTok( $M, $H, $R.1 ) ▶₂ #k.2 )
+            case Human_authorizes_server_upstream
+            solve( !Pk( $H, pk(x) ) ▶₄ #k.2 )
+              case Register
+              solve( Consent( $H, C.1, $M, s, tid ) @ #j )
+                case Human_consents_dynamic
+                solve( !Ltk( $H, kH ) ▶₁ #j )
+                  case Register
+                  solve( !Ltk( 'AS', kAS ) ▶₂ #j )
+                    case Register
+                    solve( !KU( sign(<'at', $H, C, $M, <op, v>, cnf, ~tid>, ~k.1)
+                           ) @ #vk.45 )
+                      case Human_consents_dynamic
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      by solve( !KU( ~k.1 ) @ #vk.59 )
+                    qed
+                  qed
+                qed
+              next
+                case Human_consents_other
+                solve( !Ltk( $H, kH ) ▶₁ #j )
+                  case Register
+                  solve( !Ltk( 'AS', kAS ) ▶₂ #j )
+                    case Register
+                    solve( !KU( sign(<'at', $H, C, $M, <op, v>, cnf, ~tid>, ~k.1)
+                           ) @ #vk.45 )
+                      case Human_consents_other
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      by solve( !KU( ~k.1 ) @ #vk.59 )
+                    qed
+                  qed
+                qed
+              next
+                case Human_consents_static
+                solve( !Ltk( $H, kH ) ▶₁ #j )
+                  case Register
+                  solve( !Ltk( 'AS', kAS ) ▶₂ #j )
+                    case Register
+                    solve( !KU( sign(<'at', $H, C, $M, <op, v>, cnf, ~tid>, ~k.1)
+                           ) @ #vk.45 )
+                      case Human_consents_static
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      by solve( !KU( ~k.1 ) @ #vk.59 )
+                    qed
+                  qed
+                qed
+              qed
+            qed
+          qed
+        qed
+      next
+        case case_2
+        solve( !Pk( 'AS', pk(x) ) ▶₁ #k.2 )
+          case Register
+          solve( !UpTok( $M, $H, $R.1 ) ▶₂ #k.2 )
+            case Human_authorizes_server_upstream
+            solve( !Pk( $H, pk(x) ) ▶₄ #k.2 )
+              case Register
+              solve( Consent( $H, C.1, $M, s, tid ) @ #j )
+                case Human_consents_dynamic
+                solve( !Ltk( $H, kH ) ▶₁ #j )
+                  case Register
+                  solve( !Ltk( 'AS', kAS ) ▶₂ #j )
+                    case Register
+                    solve( !KU( sign(<'at', $H, C, $M, <op, v>, cnf, ~tid>, ~k.1)
+                           ) @ #vk.46 )
+                      case Human_consents_dynamic
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      by solve( !KU( ~k.1 ) @ #vk.61 )
+                    qed
+                  qed
+                qed
+              next
+                case Human_consents_other
+                solve( !Ltk( $H, kH ) ▶₁ #j )
+                  case Register
+                  solve( !Ltk( 'AS', kAS ) ▶₂ #j )
+                    case Register
+                    solve( !KU( sign(<'at', $H, C, $M, <op, v>, cnf, ~tid>, ~k.1)
+                           ) @ #vk.46 )
+                      case Human_consents_other
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      by solve( !KU( ~k.1 ) @ #vk.61 )
+                    qed
+                  qed
+                qed
+              next
+                case Human_consents_static
+                solve( !Ltk( $H, kH ) ▶₁ #j )
+                  case Register
+                  solve( !Ltk( 'AS', kAS ) ▶₂ #j )
+                    case Register
+                    solve( !KU( sign(<'at', $H, C, $M, <op, v>, cnf, ~tid>, ~k.1)
+                           ) @ #vk.46 )
+                      case Human_consents_static
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      by solve( !KU( ~k.1 ) @ #vk.61 )
+                    qed
+                  qed
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    next
+      case Server_executes_capsule_hole_unchecked
+      solve( (s = <op, v>)  ∥
+             (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (s = <op.1, 'any'>)) )
+        case case_1
+        solve( !Pk( 'AS', pk(x) ) ▶₁ #k.2 )
+          case Register
+          solve( !UpTok( $M, $H, $R.1 ) ▶₂ #k.2 )
+            case Human_authorizes_server_upstream
+            solve( !Pk( $H, pk(x) ) ▶₄ #k.2 )
+              case Register
+              solve( Consent( $H, C.1, $M, s, tid ) @ #j )
+                case Human_consents_dynamic
+                solve( !Ltk( $H, kH ) ▶₁ #j )
+                  case Register
+                  solve( !Ltk( 'AS', kAS ) ▶₂ #j )
+                    case Register
+                    solve( !KU( sign(<'at', $H, C, $M, <op, v>, cnf, ~tid>, ~k.1)
+                           ) @ #vk.46 )
+                      case Human_consents_dynamic
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      by solve( !KU( ~k.1 ) @ #vk.60 )
+                    qed
+                  qed
+                qed
+              next
+                case Human_consents_other
+                solve( !Ltk( $H, kH ) ▶₁ #j )
+                  case Register
+                  solve( !Ltk( 'AS', kAS ) ▶₂ #j )
+                    case Register
+                    solve( !KU( sign(<'at', $H, C, $M, <op, v>, cnf, ~tid>, ~k.1)
+                           ) @ #vk.46 )
+                      case Human_consents_other
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      by solve( !KU( ~k.1 ) @ #vk.60 )
+                    qed
+                  qed
+                qed
+              next
+                case Human_consents_static
+                solve( !Ltk( $H, kH ) ▶₁ #j )
+                  case Register
+                  solve( !Ltk( 'AS', kAS ) ▶₂ #j )
+                    case Register
+                    solve( !KU( sign(<'at', $H, C, $M, <op, v>, cnf, ~tid>, ~k.1)
+                           ) @ #vk.46 )
+                      case Human_consents_static
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      by solve( !KU( ~k.1 ) @ #vk.60 )
+                    qed
+                  qed
+                qed
+              qed
+            qed
+          qed
+        qed
+      next
+        case case_2
+        solve( !Pk( 'AS', pk(x) ) ▶₁ #k.2 )
+          case Register
+          solve( !UpTok( $M, $H, $R.1 ) ▶₂ #k.2 )
+            case Human_authorizes_server_upstream
+            solve( !Pk( $H, pk(x) ) ▶₄ #k.2 )
+              case Register
+              solve( Consent( $H, C.1, $M, s, tid ) @ #j )
+                case Human_consents_dynamic
+                solve( !Ltk( $H, kH ) ▶₁ #j )
+                  case Register
+                  solve( !Ltk( 'AS', kAS ) ▶₂ #j )
+                    case Register
+                    solve( !KU( sign(<'at', $H, C, $M, <op, v>, cnf, ~tid>, ~k.1)
+                           ) @ #vk.47 )
+                      case Human_consents_dynamic
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      by solve( !KU( ~k.1 ) @ #vk.62 )
+                    qed
+                  qed
+                qed
+              next
+                case Human_consents_other
+                solve( !Ltk( $H, kH ) ▶₁ #j )
+                  case Register
+                  solve( !Ltk( 'AS', kAS ) ▶₂ #j )
+                    case Register
+                    solve( !KU( sign(<'at', $H, C, $M, <op, v>, cnf, ~tid>, ~k.1)
+                           ) @ #vk.47 )
+                      case Human_consents_other
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      by solve( !KU( ~k.1 ) @ #vk.62 )
+                    qed
+                  qed
+                qed
+              next
+                case Human_consents_static
+                solve( !Ltk( $H, kH ) ▶₁ #j )
+                  case Register
+                  solve( !Ltk( 'AS', kAS ) ▶₂ #j )
+                    case Register
+                    solve( !KU( sign(<'at', $H, C, $M, <op, v>, cnf, ~tid>, ~k.1)
+                           ) @ #vk.47 )
+                      case Human_consents_static
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      by solve( !KU( ~k.1 ) @ #vk.62 )
+                    qed
+                  qed
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  next
+    case case_2
+    solve( ToolExec( $M, $H, C.1, <op, v>, tid ) @ #k.2 )
+      case Server_executes_capsule_fixed
+      solve( (s = <op, v>)  ∥
+             (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (s = <op.1, 'any'>)) )
+        case case_1
+        solve( !Pk( 'AS', pk(x) ) ▶₁ #k.2 )
+          case Register
+          solve( !UpTok( $M, $H, $R.1 ) ▶₂ #k.2 )
+            case Human_authorizes_server_upstream
+            solve( !Pk( $H, pk(x) ) ▶₄ #k.2 )
+              case Register
+              solve( Consent( $H, C.1, $M, s, tid ) @ #j )
+                case Human_consents_dynamic
+                solve( !Ltk( $H, kH ) ▶₁ #j )
+                  case Register
+                  solve( !Ltk( 'AS', kAS ) ▶₂ #j )
+                    case Register
+                    solve( !KU( sign(<'at', $H, C, $M, <op, 'any'>, cnf, ~tid>, ~k.1)
+                           ) @ #vk.46 )
+                      case Human_consents_dynamic
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      by solve( !KU( ~k.1 ) @ #vk.61 )
+                    qed
+                  qed
+                qed
+              next
+                case Human_consents_other
+                solve( !Ltk( $H, kH ) ▶₁ #j )
+                  case Register
+                  solve( !Ltk( 'AS', kAS ) ▶₂ #j )
+                    case Register
+                    solve( !KU( sign(<'at', $H, C, $M, <op, 'any'>, cnf, ~tid>, ~k.1)
+                           ) @ #vk.46 )
+                      case Human_consents_other
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      by solve( !KU( ~k.1 ) @ #vk.61 )
+                    qed
+                  qed
+                qed
+              next
+                case Human_consents_static
+                solve( !Ltk( $H, kH ) ▶₁ #j )
+                  case Register
+                  solve( !Ltk( 'AS', kAS ) ▶₂ #j )
+                    case Register
+                    solve( !KU( sign(<'at', $H, C, $M, <op, 'any'>, cnf, ~tid>, ~k.1)
+                           ) @ #vk.46 )
+                      case Human_consents_static
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      by solve( !KU( ~k.1 ) @ #vk.61 )
+                    qed
+                  qed
+                qed
+              qed
+            qed
+          qed
+        qed
+      next
+        case case_2
+        solve( !Pk( 'AS', pk(x) ) ▶₁ #k.2 )
+          case Register
+          solve( !UpTok( $M, $H, $R.1 ) ▶₂ #k.2 )
+            case Human_authorizes_server_upstream
+            solve( !Pk( $H, pk(x) ) ▶₄ #k.2 )
+              case Register
+              solve( Consent( $H, C.1, $M, s, tid ) @ #j )
+                case Human_consents_dynamic
+                solve( !Ltk( $H, kH ) ▶₁ #j )
+                  case Register
+                  solve( !Ltk( 'AS', kAS ) ▶₂ #j )
+                    case Register
+                    solve( !KU( sign(<'at', $H, C, $M, <op, 'any'>, cnf, ~tid>, ~k.1)
+                           ) @ #vk.46 )
+                      case Human_consents_dynamic
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      by solve( !KU( ~k.1 ) @ #vk.61 )
+                    qed
+                  qed
+                qed
+              next
+                case Human_consents_other
+                solve( !Ltk( $H, kH ) ▶₁ #j )
+                  case Register
+                  solve( !Ltk( 'AS', kAS ) ▶₂ #j )
+                    case Register
+                    solve( !KU( sign(<'at', $H, C, $M, <op, 'any'>, cnf, ~tid>, ~k.1)
+                           ) @ #vk.46 )
+                      case Human_consents_other
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      by solve( !KU( ~k.1 ) @ #vk.61 )
+                    qed
+                  qed
+                qed
+              next
+                case Human_consents_static
+                solve( !Ltk( $H, kH ) ▶₁ #j )
+                  case Register
+                  solve( !Ltk( 'AS', kAS ) ▶₂ #j )
+                    case Register
+                    solve( !KU( sign(<'at', $H, C, $M, <op, 'any'>, cnf, ~tid>, ~k.1)
+                           ) @ #vk.46 )
+                      case Human_consents_static
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      by solve( !KU( ~k.1 ) @ #vk.61 )
+                    qed
+                  qed
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    next
+      case Server_executes_capsule_hole_unchecked
+      solve( (s = <op, v>)  ∥
+             (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (s = <op.1, 'any'>)) )
+        case case_1
+        solve( !Pk( 'AS', pk(x) ) ▶₁ #k.2 )
+          case Register
+          solve( !UpTok( $M, $H, $R.1 ) ▶₂ #k.2 )
+            case Human_authorizes_server_upstream
+            solve( !Pk( $H, pk(x) ) ▶₄ #k.2 )
+              case Register
+              solve( Consent( $H, C.1, $M, s, tid ) @ #j )
+                case Human_consents_dynamic
+                solve( !Ltk( $H, kH ) ▶₁ #j )
+                  case Register
+                  solve( !Ltk( 'AS', kAS ) ▶₂ #j )
+                    case Register
+                    solve( !KU( sign(<'at', $H, C, $M, <op, 'any'>, cnf, ~tid>, ~k.1)
+                           ) @ #vk.47 )
+                      case Human_consents_dynamic
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      by solve( !KU( ~k.1 ) @ #vk.62 )
+                    qed
+                  qed
+                qed
+              next
+                case Human_consents_other
+                solve( !Ltk( $H, kH ) ▶₁ #j )
+                  case Register
+                  solve( !Ltk( 'AS', kAS ) ▶₂ #j )
+                    case Register
+                    solve( !KU( sign(<'at', $H, C, $M, <op, 'any'>, cnf, ~tid>, ~k.1)
+                           ) @ #vk.47 )
+                      case Human_consents_other
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      by solve( !KU( ~k.1 ) @ #vk.62 )
+                    qed
+                  qed
+                qed
+              next
+                case Human_consents_static
+                solve( !Ltk( $H, kH ) ▶₁ #j )
+                  case Register
+                  solve( !Ltk( 'AS', kAS ) ▶₂ #j )
+                    case Register
+                    solve( !KU( sign(<'at', $H, C, $M, <op, 'any'>, cnf, ~tid>, ~k.1)
+                           ) @ #vk.47 )
+                      case Human_consents_static
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      by solve( !KU( ~k.1 ) @ #vk.62 )
+                    qed
+                  qed
+                qed
+              qed
+            qed
+          qed
+        qed
+      next
+        case case_2
+        solve( !Pk( 'AS', pk(x) ) ▶₁ #k.2 )
+          case Register
+          solve( !UpTok( $M, $H, $R.1 ) ▶₂ #k.2 )
+            case Human_authorizes_server_upstream
+            solve( !Pk( $H, pk(x) ) ▶₄ #k.2 )
+              case Register
+              solve( Consent( $H, C.1, $M, s, tid ) @ #j )
+                case Human_consents_dynamic
+                solve( !Ltk( $H, kH ) ▶₁ #j )
+                  case Register
+                  solve( !Ltk( 'AS', kAS ) ▶₂ #j )
+                    case Register
+                    solve( !KU( sign(<'at', $H, C, $M, <op, 'any'>, cnf, ~tid>, ~k.1)
+                           ) @ #vk.47 )
+                      case Human_consents_dynamic
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      by solve( !KU( ~k.1 ) @ #vk.62 )
+                    qed
+                  qed
+                qed
+              next
+                case Human_consents_other
+                solve( !Ltk( $H, kH ) ▶₁ #j )
+                  case Register
+                  solve( !Ltk( 'AS', kAS ) ▶₂ #j )
+                    case Register
+                    solve( !KU( sign(<'at', $H, C, $M, <op, 'any'>, cnf, ~tid>, ~k.1)
+                           ) @ #vk.47 )
+                      case Human_consents_other
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      by solve( !KU( ~k.1 ) @ #vk.62 )
+                    qed
+                  qed
+                qed
+              next
+                case Human_consents_static
+                solve( !Ltk( $H, kH ) ▶₁ #j )
+                  case Register
+                  solve( !Ltk( 'AS', kAS ) ▶₂ #j )
+                    case Register
+                    solve( !KU( sign(<'at', $H, C, $M, <op, 'any'>, cnf, ~tid>, ~k.1)
+                           ) @ #vk.47 )
+                      case Human_consents_static
+                      by contradiction /* from formulas */
+                    next
+                      case c_sign
+                      by solve( !KU( ~k.1 ) @ #vk.62 )
+                    qed
+                  qed
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma witness_identity_collapse:
+  exists-trace
+  "∃ R H L M a b t1 t2 C1 C2 #i #j #k #l.
+    ((((Accept( R, H, L, a, t1 ) @ #i) ∧ (Accept( R, H, L, b, t2 ) @ #j)) ∧
+      (ToolExec( M, H, C1, a, t1 ) @ #k)) ∧
+     (ToolExec( M, H, C2, b, t2 ) @ #l)) ∧
+    (¬(C1 = C2))"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ R H L M a b t1 t2 C1 C2 #i #j #k #l.
+  (Accept( R, H, L, a, t1 ) @ #i) ∧
+  (Accept( R, H, L, b, t2 ) @ #j) ∧
+  (ToolExec( M, H, C1, a, t1 ) @ #k) ∧
+  (ToolExec( M, H, C2, b, t2 ) @ #l)
+ ∧
+  ¬(C1 = C2)"
+*/
+simplify
+solve( UpReq( L, R, H, C, a, t1 ) ▶₀ #i )
+  case Server_executes_capsule_fixed
+  solve( (s = a)  ∥ (∃ op x. (a = <op, x>) ∧ (s = <op, 'any'>)) )
+    case case_2
+    solve( UpReq( $M, $R, $H, C.1, b, t2 ) ▶₀ #j )
+      case Server_executes_capsule_fixed
+      solve( (s = b)  ∥ (∃ op x. (b = <op, x>) ∧ (s = <op, 'any'>)) )
+        case case_2
+        solve( ToolExec( M.1, $H, C1, <op, x>, t1 ) @ #k.2 )
+          case Server_executes_capsule_fixed
+          solve( (s = <op, x>)  ∥
+                 (∃ op.1 x.1. (<op, x> = <op.1, x.1>) ∧ (s = <op.1, 'any'>)) )
+            case case_2
+            solve( !Pk( 'AS', pk(x.2) ) ▶₁ #k.2 )
+              case Register
+              solve( !UpTok( $M.1, $H, $R.1 ) ▶₂ #k.2 )
+                case Human_authorizes_server_upstream
+                solve( !Pk( $H, pk(x.2) ) ▶₄ #k.2 )
+                  case Register
+                  solve( ToolExec( $M.1, $H, C2, <op.1, x.1>, t2 ) @ #l )
+                    case Server_executes_capsule_fixed
+                    solve( (s = <op.1, x.1>)  ∥
+                           (∃ op.2 x.2. (<op.1, x.1> = <op.2, x.2>) ∧ (s = <op.2, 'any'>)) )
+                      case case_2
+                      solve( !Pk( 'AS', pk(x.2) ) ▶₁ #l )
+                        case Register
+                        solve( !UpTok( $M.1, $H, $R.1 ) ▶₂ #l )
+                          case Human_authorizes_server_upstream
+                          solve( !Pk( $H, pk(x.2) ) ▶₄ #l )
+                            case Register
+                            solve( !KU( sign(<'at', $H, C, $M, <op, 'any'>, cnf.1, t1>, ~k)
+                                   ) @ #vk.57 )
+                              case Human_consents_static
+                              solve( !KU( sign(<'cap', $H, ~tid, 'fixed', 'push', x>, ~k.1)
+                                     ) @ #vk.63 )
+                                case Human_consents_static
+                                solve( !KU( sign(<'at', $H, C.1, $M, <op, 'any'>, cnf.2, t2>, ~k)
+                                       ) @ #vk.79 )
+                                  case Human_consents_static
+                                  solve( !KU( sign(<'cap', $H, ~tid.1, 'fixed', 'push', x>, ~k.1)
+                                         ) @ #vk.79 )
+                                    case Human_consents_static
+                                    solve( !KU( sign(<'at', $H, C1, $M.1, <'push', 'any'>, cnf.1, ~tid>, ~k)
+                                           ) @ #vk.86 )
+                                      case Human_consents_static
+                                      solve( !KU( sign(<'at', $H, C2, $M, <'push', 'any'>, cnf, ~tid.1>, ~k)
+                                             ) @ #vk.82 )
+                                        case Human_consents_static
+                                        solve( !KU( ~tid ) @ #vk.57 )
+                                          case Human_consents_static_case_1
+                                          solve( !KU( ~tid.1 ) @ #vk.68 )
+                                            case Human_consents_static_case_1
+                                            SOLVED // trace found
+                                          qed
+                                        qed
+                                      qed
+                                    qed
+                                  qed
+                                qed
+                              qed
+                            qed
+                          qed
+                        qed
+                      qed
+                    qed
+                  qed
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma CONSENT_M_server_acts_only_on_its_own_grant:
+  all-traces
+  "∀ M H C a tid #i.
+    (ToolExec( M, H, C, a, tid ) @ #i) ⇒
+    (∃ s #j. Consent( H, C, M, s, tid ) @ #j)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ M H C a tid #i.
+  (ToolExec( M, H, C, a, tid ) @ #i)
+ ∧
+  ∀ s #j. (Consent( H, C, M, s, tid ) @ #j) ⇒ ⊥"
+*/
+simplify
+solve( ToolExec( M, H, C, a, tid ) @ #i )
+  case Server_executes_capsule_fixed
+  solve( (s = a)  ∥ (∃ op x. (a = <op, x>) ∧ (s = <op, 'any'>)) )
+    case case_1
+    solve( !Pk( 'AS', pk(x) ) ▶₁ #i )
+      case Register
+      solve( !UpTok( $M, H, $R ) ▶₂ #i )
+        case Human_authorizes_server_upstream
+        solve( !Pk( $H, pk(x) ) ▶₄ #i )
+          case Register
+          solve( !KU( sign(<'at', $H, C, $M, a, cnf, tid>, ~k) ) @ #vk.26 )
+            case Human_consents_dynamic
+            by contradiction /* from formulas */
+          next
+            case Human_consents_other
+            by contradiction /* from formulas */
+          next
+            case Human_consents_static
+            by contradiction /* from formulas */
+          next
+            case c_sign
+            by solve( !KU( ~k ) @ #vk.31 )
+          qed
+        qed
+      qed
+    qed
+  next
+    case case_2
+    solve( !Pk( 'AS', pk(x.1) ) ▶₁ #i )
+      case Register
+      solve( !UpTok( $M, H, $R ) ▶₂ #i )
+        case Human_authorizes_server_upstream
+        solve( !Pk( $H, pk(x.1) ) ▶₄ #i )
+          case Register
+          solve( !KU( sign(<'at', $H, C, $M, <op, 'any'>, cnf, tid>, ~k)
+                 ) @ #vk.27 )
+            case Human_consents_dynamic
+            by contradiction /* from formulas */
+          next
+            case Human_consents_other
+            by contradiction /* from formulas */
+          next
+            case Human_consents_static
+            by contradiction /* from formulas */
+          next
+            case c_sign
+            by solve( !KU( ~k ) @ #vk.35 )
+          qed
+        qed
+      qed
+    qed
+  qed
+next
+  case Server_executes_capsule_hole_unchecked
+  solve( (s = <op, v>)  ∥
+         (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (s = <op.1, 'any'>)) )
+    case case_1
+    solve( !Pk( 'AS', pk(x) ) ▶₁ #i )
+      case Register
+      solve( !UpTok( $M, H, $R ) ▶₂ #i )
+        case Human_authorizes_server_upstream
+        solve( !Pk( $H, pk(x) ) ▶₄ #i )
+          case Register
+          solve( !KU( sign(<'at', $H, C, $M, <op, v>, cnf, tid>, ~k) ) @ #vk.29 )
+            case Human_consents_dynamic
+            by contradiction /* from formulas */
+          next
+            case Human_consents_other
+            by contradiction /* from formulas */
+          next
+            case Human_consents_static
+            by contradiction /* from formulas */
+          next
+            case c_sign
+            by solve( !KU( ~k ) @ #vk.35 )
+          qed
+        qed
+      qed
+    qed
+  next
+    case case_2
+    solve( !Pk( 'AS', pk(x) ) ▶₁ #i )
+      case Register
+      solve( !UpTok( $M, H, $R ) ▶₂ #i )
+        case Human_authorizes_server_upstream
+        solve( !Pk( $H, pk(x) ) ▶₄ #i )
+          case Register
+          solve( !KU( sign(<'at', $H, C, $M, <op, 'any'>, cnf, tid>, ~k)
+                 ) @ #vk.30 )
+            case Human_consents_dynamic
+            by contradiction /* from formulas */
+          next
+            case Human_consents_other
+            by contradiction /* from formulas */
+          next
+            case Human_consents_static
+            by contradiction /* from formulas */
+          next
+            case c_sign
+            by solve( !KU( ~k ) @ #vk.37 )
+          qed
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma NOESC_upstream_action_within_consent_at_server:
+  all-traces
+  "∀ R M H L a tid #i.
+    ((Accept( R, H, L, a, tid ) @ #i) ∧ (ViaServer( R, M, a, tid ) @ #i)) ⇒
+    (∃ C s #j.
+      (Consent( H, C, M, s, tid ) @ #j) ∧
+      ((s = a) ∨ (∃ op x. (a = <op, x>) ∧ (s = <op, 'any'>))))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ R M H L a tid #i.
+  (Accept( R, H, L, a, tid ) @ #i) ∧ (ViaServer( R, M, a, tid ) @ #i)
+ ∧
+  ∀ C s #j.
+   (Consent( H, C, M, s, tid ) @ #j)
+  ⇒
+   (¬(s = a)) ∧ (∀ op x. (a = <op, x>) ∧ (s = <op, 'any'>) ⇒ ⊥)"
+*/
+simplify
+solve( UpReq( M, R, H, C, a, tid ) ▶₀ #i )
+  case Server_executes_capsule_fixed
+  solve( (s = a)  ∥ (∃ op x. (a = <op, x>) ∧ (s = <op, 'any'>)) )
+    case case_1
+    solve( !KU( sign(<'at', $H, C, $M, a, cnf, tid>, ~k) ) @ #vk.26 )
+      case Human_consents_dynamic
+      by contradiction /* from formulas */
+    next
+      case Human_consents_other
+      by contradiction /* from formulas */
+    next
+      case Human_consents_static
+      by contradiction /* from formulas */
+    next
+      case c_sign
+      by solve( !KU( ~k ) @ #vk.31 )
+    qed
+  next
+    case case_2
+    solve( !KU( sign(<'at', $H, C, $M, <op, 'any'>, cnf, tid>, ~k)
+           ) @ #vk.27 )
+      case Human_consents_dynamic
+      by contradiction /* from formulas */
+    next
+      case Human_consents_other
+      by contradiction /* from formulas */
+    next
+      case Human_consents_static
+      by contradiction /* from formulas */
+    next
+      case c_sign
+      by solve( !KU( ~k ) @ #vk.35 )
+    qed
+  qed
+next
+  case Server_executes_capsule_hole_unchecked
+  solve( (s = <op, v>)  ∥
+         (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (s = <op.1, 'any'>)) )
+    case case_1
+    solve( !KU( sign(<'at', $H, C, $M, <op, v>, cnf, tid>, ~k) ) @ #vk.29 )
+      case Human_consents_dynamic
+      by contradiction /* from formulas */
+    next
+      case Human_consents_other
+      by contradiction /* from formulas */
+    next
+      case Human_consents_static
+      by contradiction /* from formulas */
+    next
+      case c_sign
+      by solve( !KU( ~k ) @ #vk.35 )
+    qed
+  next
+    case case_2
+    solve( !KU( sign(<'at', $H, C, $M, <op, 'any'>, cnf, tid>, ~k)
+           ) @ #vk.30 )
+      case Human_consents_dynamic
+      by contradiction /* from formulas */
+    next
+      case Human_consents_other
+      by contradiction /* from formulas */
+    next
+      case Human_consents_static
+      by contradiction /* from formulas */
+    next
+      case c_sign
+      by solve( !KU( ~k ) @ #vk.37 )
+    qed
+  qed
+qed
+
+lemma ATTR_agent_logged_client_decided_call:
+  all-traces
+  "∀ R H L a tid #i.
+    (Accept( R, H, L, a, tid ) @ #i) ⇒
+    (∃ #j. (Request( L, a, tid ) @ #j) ∧ (#j < #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ R H L a tid #i.
+  (Accept( R, H, L, a, tid ) @ #i)
+ ∧
+  ∀ #j. (Request( L, a, tid ) @ #j) ⇒ ¬(#j < #i)"
+*/
+simplify
+solve( UpReq( L, R, H, C, a, tid ) ▶₀ #i )
+  case Server_executes_capsule_fixed
+  solve( (s = a)  ∥ (∃ op x. (a = <op, x>) ∧ (s = <op, 'any'>)) )
+    case case_2
+    solve( !KU( sign(<'at', $H, C, $M, <op, 'any'>, cnf, tid>, ~k)
+           ) @ #vk.27 )
+      case Human_consents_static
+      solve( !KU( sign(<'cap', $H, ~tid, 'fixed', 'push', x>, ~k.1)
+             ) @ #vk.31 )
+        case Human_consents_static
+        solve( !KU( ~tid ) @ #vk.28 )
+          case Human_consents_static_case_1
+          SOLVED // trace found
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma TASK_static_task:
+  all-traces
+  "∀ R H L a tid #i #j.
+    ((Accept( R, H, L, a, tid ) @ #i) ∧ (TaskStatic( tid ) @ #j)) ⇒
+    (∃ #k. Intends( H, tid, <'fixed', a> ) @ #k)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ R H L a tid #i #j.
+  (Accept( R, H, L, a, tid ) @ #i) ∧ (TaskStatic( tid ) @ #j)
+ ∧
+  ∀ #k. (Intends( H, tid, <'fixed', a> ) @ #k) ⇒ ⊥"
+*/
+simplify
+solve( UpReq( L, R, H, C, a, ~tid ) ▶₀ #i )
+  case Server_executes_capsule_fixed
+  solve( (s = a)  ∥ (∃ op x. (a = <op, x>) ∧ (s = <op, 'any'>)) )
+    case case_1
+    solve( !Ltk( $H.1, kH ) ▶₁ #j )
+      case Register
+      solve( !Ltk( 'AS', kAS ) ▶₂ #j )
+        case Register
+        solve( !KU( sign(<'at', $H, C, $M, a, cnf, ~tid>, ~k.1) ) @ #vk.26 )
+          case Human_consents_static
+          by contradiction /* from formulas */
+        next
+          case c_sign
+          by solve( !KU( ~k.1 ) @ #vk.31 )
+        qed
+      qed
+    qed
+  next
+    case case_2
+    solve( !Ltk( $H.1, kH ) ▶₁ #j )
+      case Register
+      solve( !Ltk( 'AS', kAS ) ▶₂ #j )
+        case Register
+        solve( !KU( sign(<'at', $H, C, $M, <op, 'any'>, cnf, ~tid>, ~k.1)
+               ) @ #vk.27 )
+          case Human_consents_static
+          solve( !KU( sign(<'cap', $H, ~tid, 'fixed', 'push', x>, ~k) ) @ #vk.31 )
+            case Human_consents_static
+            by contradiction /* from formulas */
+          next
+            case c_sign
+            by solve( !KU( ~k ) @ #vk.35 )
+          qed
+        next
+          case c_sign
+          by solve( !KU( ~k.1 ) @ #vk.35 )
+        qed
+      qed
+    qed
+  qed
+next
+  case Server_executes_capsule_hole_unchecked
+  solve( (s = <op, v>)  ∥
+         (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (s = <op.1, 'any'>)) )
+    case case_1
+    solve( !Ltk( $H.1, kH ) ▶₁ #j )
+      case Register
+      solve( !Ltk( 'AS', kAS ) ▶₂ #j )
+        case Register
+        solve( !KU( sign(<'at', $H, C, $M, <op, v>, cnf, ~tid>, ~k.1)
+               ) @ #vk.29 )
+          case Human_consents_static
+          by contradiction /* from formulas */
+        next
+          case c_sign
+          by solve( !KU( ~k.1 ) @ #vk.35 )
+        qed
+      qed
+    qed
+  next
+    case case_2
+    solve( !Ltk( $H.1, kH ) ▶₁ #j )
+      case Register
+      solve( !Ltk( 'AS', kAS ) ▶₂ #j )
+        case Register
+        solve( !KU( sign(<'at', $H, C, $M, <op, 'any'>, cnf, ~tid>, ~k.1)
+               ) @ #vk.30 )
+          case Human_consents_static
+          solve( !KU( sign(<'cap', $H, ~tid, 'hole', 'push', S>, ~k) ) @ #vk.35 )
+            case c_sign
+            by solve( !KU( ~k ) @ #vk.37 )
+          qed
+        next
+          case c_sign
+          by solve( !KU( ~k.1 ) @ #vk.37 )
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma TASK_dynamic_task:
+  all-traces
+  "∀ R H L op v tid #i #j.
+    ((Accept( R, H, L, <op, v>, tid ) @ #i) ∧ (TaskDynamic( tid ) @ #j)) ⇒
+    (∃ S #k #l.
+      (Intends( H, tid, <'hole', op, S> ) @ #k) ∧
+      (Produced( S, tid, v ) @ #l))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ R H L op v tid #i #j.
+  (Accept( R, H, L, <op, v>, tid ) @ #i) ∧ (TaskDynamic( tid ) @ #j)
+ ∧
+  ∀ S #k #l.
+   (Intends( H, tid, <'hole', op, S> ) @ #k) ∧ (Produced( S, tid, v ) @ #l)
+  ⇒
+   ⊥"
+*/
+simplify
+solve( UpReq( L, R, H, C, <op, v>, ~tid ) ▶₀ #i )
+  case Server_executes_capsule_hole_unchecked
+  solve( (s = <op, v>)  ∥
+         (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (s = <op.1, 'any'>)) )
+    case case_2
+    solve( !Ltk( $H.1, kH ) ▶₁ #j )
+      case Register
+      solve( !Ltk( 'AS', kAS ) ▶₂ #j )
+        case Register
+        solve( !KU( sign(<'at', $H, C, $M, <op, 'any'>, cnf, ~tid>, ~k.1)
+               ) @ #vk.30 )
+          case Human_consents_dynamic
+          solve( !KU( sign(<'cap', $H, ~tid, 'hole', 'push', S>, ~k) ) @ #vk.35 )
+            case Human_consents_dynamic
+            solve( !KU( ~tid ) @ #vk.31 )
+              case Human_consents_dynamic_case_1
+              SOLVED // trace found
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+qed
+
+/*
+WARNING: the following wellformedness checks failed!
+
+Variable with mismatching sorts or capitalization
+=================================================
+
+Possible reasons:
+1. Identifiers are case sensitive, i.e.,'x' and 'X' are considered to be different.
+2. The same holds for sorts:, i.e., '$x', 'x', and '~x' are considered to be different.
+
+  rule `Server_executes_capsule_hole_unchecked': 
+    1. S, s
+*/
+
+/*
+Generated from:
+Tamarin version 1.12.0
+Maude version 3.5.1
+Git revision: 82780bbaf3328a45f624ddb41e51bf75425f851c (with uncommited changes), branch: master
+Compiled at: 2026-03-07 14:22:39.174278293 UTC
+*/
+
+end
+
+==============================================================================
+summary of summaries:
+
+analyzed: models/generated/mcp_capsule/MCP_r016_capsule.spthy
+
+  processing time: 104.00s
+  
+  WARNING: 1 wellformedness check failed!
+           The analysis results might be wrong!
+  
+  executable_static_task_conformant (exists-trace): verified (10 steps)
+  executable_dynamic_task_conformant (exists-trace): verified (11 steps)
+  witness_cross_server_token_replay (exists-trace): falsified - no trace found (80 steps)
+  witness_scope_escalation_via_upstream_token (exists-trace): falsified - no trace found (320 steps)
+  witness_identity_collapse (exists-trace): verified (24 steps)
+  CONSENT_M_server_acts_only_on_its_own_grant (all-traces): verified (36 steps)
+  NOESC_upstream_action_within_consent_at_server (all-traces): verified (24 steps)
+  ATTR_agent_logged_client_decided_call (all-traces): falsified - found trace (7 steps)
+  TASK_static_task (all-traces): verified (27 steps)
+  TASK_dynamic_task (all-traces): falsified - found trace (9 steps)
+
+==============================================================================

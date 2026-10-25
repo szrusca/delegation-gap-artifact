@@ -1,0 +1,9 @@
+{
+  "title": "Artifact for: The Delegation-Authorization Gap in Multi-Hop AI-Agent Chains: A Formal Foundation and Protocol Analysis",
+  "upload_type": "software",
+  "version": "1.0",
+  "creators": [{"name": "Song, Zhouran", "affiliation": "Independent researcher"}],
+  "description": "Tamarin and ProVerif models, generators, predictions written before each run, raw prover logs, and implementation replays (Keycloak, MCP TypeScript SDK) behind every table of the paper.",
+  "keywords": ["AI agents", "delegation", "authorization", "OAuth", "Model Context Protocol", "Tamarin", "ProVerif"],
+  "license": "MIT"
+}

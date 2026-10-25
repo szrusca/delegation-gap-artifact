@@ -1,0 +1,195 @@
+theory WIMSE_exact_consent
+begin
+
+builtins: signing, hashing
+
+restriction Equality:
+  "All x y #i. Eq(x, y) @ #i ==> x = y"
+
+restriction CaveatPermits:
+  "All c a #i. Check(c, a) @ #i ==> (c = a | (Ex op x. a = <op, x> & c = <op, 'any'>))"
+
+restriction ConcreteOperand:
+  "All op #i. Act(<op, 'any'>) @ #i ==> F"
+
+restriction UniqueKey:
+  "All X #i #j. Register(X) @ #i & Register(X) @ #j ==> #i = #j"
+
+restriction OneValuePerSourceAndTask:
+  "All s t v w #i #j. Produced(s, t, v) @ #i & Produced(s, t, w) @ #j ==> #i = #j"
+
+restriction HumanTaskOperandIsConcrete:
+  "All H t op #i. Intends(H, t, <'fixed', op, 'any'>) @ #i ==> F"
+
+rule Register:
+  [ Fr(~k) ]
+  --[ Register($X), Key($X, pk(~k)) ]->
+  [ !Ltk($X, ~k), !Pk($X, pk(~k)), Out(pk(~k)) ]
+
+rule Human_links_vault_credential:
+  [ !Ltk($H, kH) ]
+  --[ VaultLinked($H, $R) ]->
+  [ !Vault($H, $R) ]
+
+rule Human_starts_static_task:
+  [ Fr(~tid), !Ltk($H, kH) ]
+  --[ Intends($H, ~tid, <'fixed', 'push', $repo>), TaskStatic(~tid) ]->
+  [ Out(<~tid, $H>), !TaskOf(~tid, $H), !TaskFixed(~tid, $H, <'push', $repo>) ]
+
+rule Human_starts_dynamic_task:
+  [ Fr(~tid), !Ltk($H, kH) ]
+  --[ Intends($H, ~tid, <'hole', 'push', $Src>), TaskDynamic(~tid) ]->
+  [ Out(<~tid, $H>), !TaskOf(~tid, $H), !TaskHole(~tid, $H), !TaskOpen(~tid, $Src) ]
+
+rule Source_produces:
+  [ !TaskOpen(tid, $Src), !Ltk($Src, ks) ]
+  --[ Produced($Src, tid, $v) ]->
+  [ Out(<'prov', $Src, tid, $v>) ]
+
+rule Human_preauthorizes_agent_did:
+  [ !Ltk($H, kH), !Pk($D, pkD) ]
+  --[ DidPreAuthorized($H, pkD) ]->
+  [ !PreAuth($H, pkD) ]
+
+rule Human_approves_exact_operand:
+  [ !TaskFixed(tid, H, c), !PreAuth(H, did) ]
+  --[ CibaApproved(H, did, c, tid) ]->
+  [ !Approved(H, did, c, tid) ]
+
+rule Human_approves_proposed_operand:
+  [ !TaskHole(tid, H), !PreAuth(H, did), In(v) ]
+  --[ CibaApproved(H, did, <'push', v>, tid) ]->
+  [ !Approved(H, did, <'push', v>, tid) ]
+
+rule Agent_requests_root_dt:
+  let m = <'rreq', H, pk(kD), c, tid>
+  in
+  [ In(<H, c, tid>), !Ltk($D, kD) ]
+  --[ RootRequested(pk(kD), H, c, tid) ]->
+  [ Out(<m, sign(m, kD)>) ]
+
+rule Agent_requests_subdelegation:
+  let dt = <'dt', H, pk(k1), c1, tid, 'root'>
+      m  = <'sreq', h(dt), did2, c2>
+  in
+  [ In(<dt, ds>), In(<did2, c2>), !Ltk($D, k1) ]
+  --[ SubDelegated(pk(k1), did2, tid) ]->
+  [ Out(<'sreq', dt, ds, did2, c2, sign(m, k1)>) ]
+
+rule Agent_exercises:
+  let dt = <'dt', H, pk(kD), c, tid, par>
+  in
+  [ In(<dt, ds>), In(<$R, a>), !Ltk($D, kD) ]
+  --[ Request(pk(kD), a, tid) ]->
+  [ Out(<'ex', dt, ds, $R, a, sign(<'dpop', a, $R, h(dt)>, kD)>) ]
+
+rule DS_issues_root_dt:
+  let m  = <'rreq', H, did, c, tid>
+      dt = <'dt', H, did, c, tid, 'root'>
+  in
+  [ In(<m, sg>), !TaskOf(tid, H), !Ltk('DS', kDS), !PreAuth(H, did), !Approved(H, did, c, tid) ]
+  --[ Eq(verify(sg, m, did), true), RootIssued(H, did, c, tid) ]->
+  [ Out(<dt, sign(dt, kDS)>) ]
+
+rule DS_issues_child_dt:
+  let dt    = <'dt', H, did1, c1, tid, 'root'>
+      m     = <'sreq', h(dt), did2, c2>
+      child = <'dt', H, did2, c2, tid, <'parent', did1>>
+  in
+  [ In(<'sreq', dt, ds, did2, c2, ps>), !Ltk('DS', kDS), !PreAuth(H, did2) ]
+  --[ Eq(verify(ds, dt, pk(kDS)), true), Eq(verify(ps, m, did1), true), Check(c1, c2), ChildIssued(did1, did2, tid) ]->
+  [ Out(<child, sign(child, kDS)>) ]
+
+rule DS_exercises_with_vault_credential:
+  let dt = <'dt', H, did, c, tid, par>
+  in
+  [ In(<'ex', dt, ds, $R, a, pr>), !Ltk('DS', kDS), !Vault(H, $R) ]
+  --[ Eq(verify(ds, dt, pk(kDS)), true), Eq(verify(pr, <'dpop', a, $R, h(dt)>, did), true)
+    , Check(c, a), Act(a), DSExec(H, did, a, tid) ]->
+  [ UpCall($R, H, a, tid) ]
+
+rule Resource_accepts_vault_call:
+  [ UpCall(R, H, a, tid) ]
+  --[ Accept(R, H, 'DS', a, tid) ]->
+  [ ]
+
+lemma executable_static_task_conformant_two_hops:
+  exists-trace
+  "Ex R H a tid D1 D2 d1 d2 #i #e #c #j #k #k1 #k2.
+     Accept(R, H, 'DS', a, tid) @ #i & DSExec(H, d2, a, tid) @ #e & ChildIssued(d1, d2, tid) @ #c
+     & TaskStatic(tid) @ #j & Intends(H, tid, <'fixed', a>) @ #k
+     & Key(D1, d1) @ #k1 & Key(D2, d2) @ #k2 & not (D1 = D2)"
+
+lemma executable_dynamic_task_conformant_two_hops:
+  exists-trace
+  "Ex R H op v S tid D1 D2 d1 d2 #i #e #c #k #l #k1 #k2.
+     Accept(R, H, 'DS', <op, v>, tid) @ #i & DSExec(H, d2, <op, v>, tid) @ #e & ChildIssued(d1, d2, tid) @ #c
+     & Intends(H, tid, <'hole', op, S>) @ #k & Produced(S, tid, v) @ #l
+     & Key(D1, d1) @ #k1 & Key(D2, d2) @ #k2 & not (D1 = D2)"
+
+lemma witness_splice_child_without_parent_request:
+  exists-trace
+  "Ex D1 d1 d2 tid #c #k.
+     ChildIssued(d1, d2, tid) @ #c & Key(D1, d1) @ #k
+     & not (Ex #j. SubDelegated(d1, d2, tid) @ #j)"
+
+lemma witness_exercise_by_unregistered_did:
+  exists-trace
+  "Ex H did a tid #e.
+     DSExec(H, did, a, tid) @ #e & not (Ex D #k. Key(D, did) @ #k)"
+
+lemma witness_identity_collapse_at_resource:
+  exists-trace
+  "Ex R H a b t1 t2 d1 d2 #i #j #e1 #e2.
+     Accept(R, H, 'DS', a, t1) @ #i & Accept(R, H, 'DS', b, t2) @ #j
+     & DSExec(H, d1, a, t1) @ #e1 & DSExec(H, d2, b, t2) @ #e2 & not (d1 = d2)"
+
+lemma witness_identity_collapse_guided:
+  exists-trace
+  "Ex R H a b t1 t2 c1 c2 D1 D2 d1 d2 #i #j #e1 #e2 #r1 #r2 #s1 #s2 #k1 #k2.
+     Accept(R, H, 'DS', a, t1) @ #i & Accept(R, H, 'DS', b, t2) @ #j
+     & DSExec(H, d1, a, t1) @ #e1 & DSExec(H, d2, b, t2) @ #e2
+     & RootIssued(H, d1, c1, t1) @ #r1 & RootIssued(H, d2, c2, t2) @ #r2
+     & TaskStatic(t1) @ #s1 & TaskStatic(t2) @ #s2
+     & Key(D1, d1) @ #k1 & Key(D2, d2) @ #k2 & not (D1 = D2)"
+
+lemma witness_identity_collapse_parent_and_child:
+  exists-trace
+  "Ex R H a tid D1 D2 d1 d2 #i #j #e1 #e2 #c #s #k1 #k2.
+     Accept(R, H, 'DS', a, tid) @ #i & Accept(R, H, 'DS', a, tid) @ #j & not (#i = #j)
+     & DSExec(H, d1, a, tid) @ #e1 & DSExec(H, d2, a, tid) @ #e2
+     & ChildIssued(d1, d2, tid) @ #c & TaskStatic(tid) @ #s
+     & Key(D1, d1) @ #k1 & Key(D2, d2) @ #k2 & not (D1 = D2)"
+
+lemma CHAINAUTH_registered_parent_requested_subdelegation:
+  "All D1 d1 d2 tid #c #k.
+     ChildIssued(d1, d2, tid) @ #c & Key(D1, d1) @ #k
+     ==> Ex #j. SubDelegated(d1, d2, tid) @ #j"
+
+lemma NOESC_exercise_within_human_authorization:
+  "All H did a tid #e.
+     DSExec(H, did, a, tid) @ #e
+     ==> (Ex c #j. PolicySet(H, c) @ #j & (c = a | (Ex op x. a = <op, x> & c = <op, 'any'>)))
+       | (Ex d c #j. CibaApproved(H, d, c, tid) @ #j & (c = a | (Ex op x. a = <op, x> & c = <op, 'any'>)))"
+
+lemma ATTR_DS_logged_did_decided_operation:
+  "All H did a tid #e.
+     DSExec(H, did, a, tid) @ #e
+     ==> Ex #j. Request(did, a, tid) @ #j & #j < #e"
+
+lemma ATTR_R_logged_principal_decided_request:
+  "All R H L a tid #i.
+     Accept(R, H, L, a, tid) @ #i
+     ==> Ex #j. Request(L, a, tid) @ #j & #j < #i"
+
+lemma TASK_static_task:
+  "All R H L a tid #i #j.
+     Accept(R, H, L, a, tid) @ #i & TaskStatic(tid) @ #j
+     ==> Ex #k. Intends(H, tid, <'fixed', a>) @ #k"
+
+lemma TASK_dynamic_task:
+  "All R H L op v tid #i #j.
+     Accept(R, H, L, <op, v>, tid) @ #i & TaskDynamic(tid) @ #j
+     ==> Ex S #k #l. Intends(H, tid, <'hole', op, S>) @ #k & Produced(S, tid, v) @ #l"
+
+end

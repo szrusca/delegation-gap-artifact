@@ -1,0 +1,4 @@
+w3p_subpop rc=0 witness_identity_collapse_at_resource (exists-trace): verified (32 steps)
+w3p_spec_min rc=0 witness_identity_collapse_at_resource (exists-trace): verified (32 steps)
+w3p_subpop_didpreauth rc=0 witness_identity_collapse_at_resource (exists-trace): verified (32 steps)
+w3p_didpreauth rc=0 witness_identity_collapse_at_resource (exists-trace): verified (32 steps)

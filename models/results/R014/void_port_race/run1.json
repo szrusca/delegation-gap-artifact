@@ -1,0 +1,107 @@
+{
+  "sdk": "1.32.1",
+  "node": "v24.22.0",
+  "startedAt": "2026-10-23T22:45:06.375Z",
+  "experiments": {
+    "K1": {
+      "calls": [
+        {
+          "accepted": true,
+          "text": "upstream 200"
+        },
+        {
+          "accepted": true,
+          "text": "upstream 200"
+        }
+      ],
+      "upstreamEntries": [
+        {
+          "authorization": "Bearer U_H_<redacted>",
+          "body": {
+            "op": "push",
+            "repo": "repoX"
+          },
+          "headerNames": [
+            "accept",
+            "accept-encoding",
+            "accept-language",
+            "authorization",
+            "connection",
+            "content-length",
+            "content-type",
+            "host",
+            "sec-fetch-mode",
+            "user-agent"
+          ]
+        },
+        {
+          "authorization": "Bearer U_H_<redacted>",
+          "body": {
+            "op": "push",
+            "repo": "repoX"
+          },
+          "headerNames": [
+            "accept",
+            "accept-encoding",
+            "accept-language",
+            "authorization",
+            "connection",
+            "content-length",
+            "content-type",
+            "host",
+            "sec-fetch-mode",
+            "user-agent"
+          ]
+        }
+      ],
+      "identical": true,
+      "clientNamedUpstream": false
+    },
+    "K2": {
+      "call": {
+        "accepted": true,
+        "text": "upstream 200"
+      },
+      "upstreamCalls": 1
+    },
+    "K2_fix": {
+      "call": {
+        "accepted": false,
+        "status": null,
+        "error": "fetch failed"
+      },
+      "upstreamCalls": 0
+    },
+    "K3": {
+      "call": {
+        "accepted": true,
+        "text": "upstream 200"
+      },
+      "serverSaw": [
+        {
+          "event": "tool_call",
+          "clientId": "client-a",
+          "scopes": [
+            "mcp",
+            "repo:write"
+          ],
+          "repo": "repoY"
+        }
+      ]
+    },
+    "K4a": {
+      "call": {
+        "accepted": false,
+        "status": null,
+        "error": "Streamable HTTP error: Error POSTing to endpoint: {\"error\":\"invalid_token\",\"error_description\":\"Token was not issued for this resource\"}"
+      }
+    },
+    "K4b": {
+      "call": {
+        "accepted": true,
+        "text": "upstream 200"
+      }
+    }
+  },
+  "upstreamTokenRedacted": "U_H_…"
+}

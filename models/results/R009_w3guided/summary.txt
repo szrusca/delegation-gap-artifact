@@ -1,0 +1,5 @@
+exact_consent rc=0 witness_identity_collapse_guided (exists-trace): verified (56 steps)
+didpreauth rc=124 
+subpop_didpreauth rc=124 
+subpop rc=124 
+spec_min rc=124 

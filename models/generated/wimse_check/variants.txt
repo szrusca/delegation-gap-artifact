@@ -1,0 +1,5 @@
+spec_min
+subpop
+didpreauth
+subpop_didpreauth
+exact_consent

@@ -1,0 +1,97 @@
+theory Separation
+begin
+
+builtins: signing, hashing
+
+restriction Equality:
+  "All x y #i. Eq(x, y) @ #i ==> x = y"
+
+restriction UniqueKey:
+  "All X #i #j. Register(X) @ #i & Register(X) @ #j ==> #i = #j"
+
+restriction OneTrackerAnswerPerTask:
+  "All t #i #j. TrackerAnswered(t) @ #i & TrackerAnswered(t) @ #j ==> #i = #j"
+
+rule Register:
+  [ Fr(~k) ]
+  --[ Register($X) ]->
+  [ !Ltk($X, ~k), !Pk($X, pk(~k)), Out(pk(~k)) ]
+
+rule Human_dynamic_task:
+  let c   = <'push', 'any'>
+      d1  = <'root', $H, $A1, c, ~tid>
+      cap = <'cap', $H, ~tid, <'hole', 'push', 'tracker'>>
+  in
+  [ Fr(~tid), !Ltk($H, kH) ]
+  --[ Intends($H, ~tid, <'hole', 'push', 'tracker'>) ]->
+  [ Out(<d1, sign(d1, kH)>), Out(<cap, sign(cap, kH)>), !Task(~tid) ]
+
+#ifdef PROV
+rule Tracker_answers_with_provenance:
+  let p = <'prov', 'tracker', tid, diff('repoY', 'repoX')>
+  in
+  [ !Task(tid), !Ltk('tracker', ks) ]
+  --[ TrackerAnswered(tid), Produced('tracker', tid, diff('repoY', 'repoX')) ]->
+  [ AgentReads(tid, diff('repoY', 'repoX')), Out(<p, sign(p, ks)>) ]
+#else
+rule Tracker_answers_privately:
+  [ !Task(tid) ]
+  --[ TrackerAnswered(tid), Produced('tracker', tid, diff('repoY', 'repoX')) ]->
+  [ AgentReads(tid, diff('repoY', 'repoX')) ]
+#endif
+
+rule Agent1_steered_delegation:
+  let d1 = <'root', H, $A1, c1, tid>
+      d2 = <'del', $A1, A2, c2, h(<d1, s1>)>
+  in
+  [ In(<d1, s1>), In(<A2, c2>), !Pk(H, pkH), !Ltk($A1, k1) ]
+  --[ Eq(verify(s1, d1, pkH), true) ]->
+  [ Out(<d2, sign(d2, k1)>) ]
+
+rule Agent2_steered_request:
+  let d1 = <'root', H, A1, c1, tid>
+      d2 = <'del', A1, $A2, c2, h(<d1, s1>)>
+      b  = <'req', a, $R, h(<d1, s1, d2, s2>)>
+  in
+  [ In(<d1, s1, d2, s2>), In(<$R, a>), AgentReads(tid, observed), !Pk(H, pkH), !Pk(A1, pkA1), !Ltk($A2, k2) ]
+  --[ Eq(verify(s1, d1, pkH), true), Eq(verify(s2, d2, pkA1), true), Request($A2, a, tid) ]->
+  [ Out(<'req', a, d1, s1, d2, s2, sign(b, k2)>) ]
+
+#ifdef PROV
+rule Resource_accepts_with_provenance:
+  let d1  = <'root', H, A1, <'push', 'any'>, tid>
+      d2  = <'del', A1, A2, c2, h(<d1, s1>)>
+      b   = <'req', <'push', v>, $R, h(<d1, s1, d2, s2>)>
+      cap = <'cap', H, tid, <'hole', 'push', S>>
+      p   = <'prov', S, tid, v>
+  in
+  [ In(<'req', <'push', v>, d1, s1, d2, s2, sr>), In(<cap, sc>), In(<p, sp>)
+  , !Pk(H, pkH), !Pk(A1, pkA1), !Pk(A2, pkA2), !Pk(S, pkS) ]
+  --[ Eq(verify(s1, d1, pkH), true), Eq(verify(s2, d2, pkA1), true), Eq(verify(sr, b, pkA2), true)
+    , Eq(verify(sc, cap, pkH), true), Eq(verify(sp, p, pkS), true)
+    , Accept($R, A2, <'push', v>, tid) ]->
+  [ Out(<'accepted', $R, <'push', v>, tid>) ]
+#else
+rule Resource_accepts_chain_view:
+  let d1  = <'root', H, A1, <'push', 'any'>, tid>
+      d2  = <'del', A1, A2, c2, h(<d1, s1>)>
+      b   = <'req', <'push', v>, $R, h(<d1, s1, d2, s2>)>
+      cap = <'cap', H, tid, <'hole', 'push', S>>
+  in
+  [ In(<'req', <'push', v>, d1, s1, d2, s2, sr>), In(<cap, sc>)
+  , !Pk(H, pkH), !Pk(A1, pkA1), !Pk(A2, pkA2) ]
+  --[ Eq(verify(s1, d1, pkH), true), Eq(verify(s2, d2, pkA1), true), Eq(verify(sr, b, pkA2), true)
+    , Eq(verify(sc, cap, pkH), true)
+    , Accept($R, A2, <'push', v>, tid) ]->
+  [ Out(<'accepted', $R, <'push', v>, tid>) ]
+#endif
+
+lemma verifier_accepts_conformant_push_to_repoY:
+  exists-trace
+  "Ex R P tid #i #j. Accept(R, P, <'push', 'repoY'>, tid) @ #i & Produced('tracker', tid, 'repoY') @ #j"
+
+lemma verifier_accepts_nonconformant_push_to_repoY:
+  exists-trace
+  "Ex R P tid #i #j. Accept(R, P, <'push', 'repoY'>, tid) @ #i & Produced('tracker', tid, 'repoX') @ #j"
+
+end

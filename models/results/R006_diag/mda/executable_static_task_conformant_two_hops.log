@@ -1,0 +1,8 @@
+maude tool: 'maude'
+ checking version: 3.5.1. OK.
+ checking installation: OK.
+[Theory RFC8693_mayact_dpop_aud] Theory loaded
+[Theory RFC8693_mayact_dpop_aud] Theory translated
+[Theory RFC8693_mayact_dpop_aud] Theory closed
+[Saturating Sources] Step 1 (Max 5)
+[Saturating Sources] Done

@@ -1,0 +1,139 @@
+theory MCP_noaud_noscope
+begin
+
+builtins: signing, hashing
+
+restriction Equality:
+  "All x y #i. Eq(x, y) @ #i ==> x = y"
+
+restriction CaveatPermits:
+  "All c a #i. Check(c, a) @ #i ==> (c = a | (Ex op x. a = <op, x> & c = <op, 'any'>))"
+
+restriction ConcreteOperand:
+  "All op #i. Act(<op, 'any'>) @ #i ==> F"
+
+restriction UniqueKey:
+  "All X #i #j. Register(X) @ #i & Register(X) @ #j ==> #i = #j"
+
+restriction OneValuePerSourceAndTask:
+  "All s t v w #i #j. Produced(s, t, v) @ #i & Produced(s, t, w) @ #j ==> #i = #j"
+
+restriction HumanTaskOperandIsConcrete:
+  "All H t op #i. Intends(H, t, <'fixed', op, 'any'>) @ #i ==> F"
+
+restriction OneUpstreamGrantPerUserServerResource:
+  "All H M R #i #j. UpConsent(H, M, R) @ #i & UpConsent(H, M, R) @ #j ==> #i = #j"
+
+rule Register:
+  [ Fr(~k) ]
+  --[ Register($X) ]->
+  [ !Ltk($X, ~k), !Pk($X, pk(~k)), Out(pk(~k)) ]
+
+rule Human_authorizes_server_upstream:
+  [ !Ltk($H, kH) ]
+  --[ UpConsent($H, $M, $R) ]->
+  [ !UpTok($M, $H, $R) ]
+
+rule Human_consents_static:
+  let t1 = <'at', $H, $C, $M, <'push', 'any'>, 'none', ~tid>
+  in
+  [ Fr(~tid), !Ltk($H, kH), !Ltk('AS', kAS) ]
+  --[ Consent($H, $C, $M, <'push', 'any'>, ~tid), Intends($H, ~tid, <'fixed', 'push', $repo>), TaskStatic(~tid) ]->
+  [ Out(<t1, sign(t1, kAS)>) ]
+
+rule Human_consents_dynamic:
+  let t1 = <'at', $H, $C, $M, <'push', 'any'>, 'none', ~tid>
+  in
+  [ Fr(~tid), !Ltk($H, kH), !Ltk('AS', kAS) ]
+  --[ Consent($H, $C, $M, <'push', 'any'>, ~tid), Intends($H, ~tid, <'hole', 'push', $Src>), TaskDynamic(~tid) ]->
+  [ Out(<t1, sign(t1, kAS)>), !TaskOpen(~tid, $Src) ]
+
+rule Human_consents_other:
+  let t1 = <'at', $H, $C, $M, <$op, 'any'>, 'none', ~tid>
+  in
+  [ Fr(~tid), !Ltk($H, kH), !Ltk('AS', kAS) ]
+  --[ Consent($H, $C, $M, <$op, 'any'>, ~tid), OtherGrant(~tid) ]->
+  [ Out(<t1, sign(t1, kAS)>) ]
+
+rule Source_produces:
+  [ !TaskOpen(tid, $Src), !Ltk($Src, ks) ]
+  --[ Produced($Src, tid, $v) ]->
+  [ Out(<'prov', $Src, tid, $v>) ]
+
+rule Agent_calls_tool:
+  let tok = <'at', H, $C, aud, s, cnf, tid>
+      pr  = <'dpop', a, $M, h(<tok, ts>)>
+  in
+  [ In(<tok, ts>), In(<$M, $R, a>), !Ltk($C, kC) ]
+  --[ Request($C, a, tid) ]->
+  [ Out(<'call', a, $M, $R, tok, ts, sign(pr, kC)>) ]
+
+rule Server_executes_tool_call:
+  let tok = <'at', H, C, aud, s, cnf, tid>
+  in
+  [ In(<'call', a, $M, $R, tok, ts, pr>), !Pk('AS', pkAS), !UpTok($M, H, $R) ]
+  --[ Eq(verify(ts, tok, pkAS), true), Act(a), ToolExec($M, H, C, a, tid) ]->
+  [ UpReq($M, $R, H, C, a, tid) ]
+
+rule Resource_accepts_upstream_call:
+  [ UpReq(M, R, H, C, a, tid) ]
+  --[ Accept(R, H, M, a, tid), ViaServer(R, M, a, tid) ]->
+  [ ]
+
+lemma executable_static_task_conformant:
+  exists-trace
+  "Ex R H L a tid #i #j #k.
+     Accept(R, H, L, a, tid) @ #i & TaskStatic(tid) @ #j & Intends(H, tid, <'fixed', a>) @ #k"
+
+lemma executable_dynamic_task_conformant:
+  exists-trace
+  "Ex R H L op v S tid #i #k #l.
+     Accept(R, H, L, <op, v>, tid) @ #i
+     & Intends(H, tid, <'hole', op, S>) @ #k & Produced(S, tid, v) @ #l"
+
+lemma witness_cross_server_token_replay:
+  exists-trace
+  "Ex M M2 H C a s tid #i #j.
+     ToolExec(M, H, C, a, tid) @ #i & Consent(H, C, M2, s, tid) @ #j & not (M = M2)"
+
+lemma witness_scope_escalation_via_upstream_token:
+  exists-trace
+  "Ex R M H L C a s tid #i #k #j.
+     Accept(R, H, L, a, tid) @ #i & ViaServer(R, M, a, tid) @ #i
+     & ToolExec(M, H, C, a, tid) @ #k & Consent(H, C, M, s, tid) @ #j
+     & not (s = a) & not (Ex op x. a = <op, x> & s = <op, 'any'>)"
+
+lemma witness_identity_collapse:
+  exists-trace
+  "Ex R H L M a b t1 t2 C1 C2 #i #j #k #l.
+     Accept(R, H, L, a, t1) @ #i & Accept(R, H, L, b, t2) @ #j
+     & ToolExec(M, H, C1, a, t1) @ #k & ToolExec(M, H, C2, b, t2) @ #l
+     & not (C1 = C2)"
+
+lemma CONSENT_M_server_acts_only_on_its_own_grant:
+  "All M H C a tid #i.
+     ToolExec(M, H, C, a, tid) @ #i
+     ==> Ex s #j. Consent(H, C, M, s, tid) @ #j"
+
+lemma NOESC_upstream_action_within_consent_at_server:
+  "All R M H L a tid #i.
+     Accept(R, H, L, a, tid) @ #i & ViaServer(R, M, a, tid) @ #i
+     ==> Ex C s #j. Consent(H, C, M, s, tid) @ #j
+         & (s = a | (Ex op x. a = <op, x> & s = <op, 'any'>))"
+
+lemma ATTR_agent_logged_client_decided_call:
+  "All R H L a tid #i.
+     Accept(R, H, L, a, tid) @ #i
+     ==> Ex #j. Request(L, a, tid) @ #j & #j < #i"
+
+lemma TASK_static_task:
+  "All R H L a tid #i #j.
+     Accept(R, H, L, a, tid) @ #i & TaskStatic(tid) @ #j
+     ==> Ex #k. Intends(H, tid, <'fixed', a>) @ #k"
+
+lemma TASK_dynamic_task:
+  "All R H L op v tid #i #j.
+     Accept(R, H, L, <op, v>, tid) @ #i & TaskDynamic(tid) @ #j
+     ==> Ex S #k #l. Intends(H, tid, <'hole', op, S>) @ #k & Produced(S, tid, v) @ #l"
+
+end

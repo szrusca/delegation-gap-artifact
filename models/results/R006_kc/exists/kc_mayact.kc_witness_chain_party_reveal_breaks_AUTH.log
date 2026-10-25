@@ -1,0 +1,885 @@
+maude tool: 'maude'
+ checking version: 3.5.1. OK.
+ checking installation: OK.
+[Theory RFC8693_kc_mayact] Theory loaded
+[Theory RFC8693_kc_mayact] Theory translated
+[Theory RFC8693_kc_mayact] Theory closed
+[Saturating Sources] Step 1 (Max 5)
+[Saturating Sources] Done
+theory RFC8693_kc_mayact
+
+begin
+
+// Function signature and definition of the equational theory E
+
+functions: fst/1, h/1, pair/2, pk/1, sign/2, snd/1, true/0, verify/3
+equations:
+    fst(<x.1, x.2>) = x.1,
+    snd(<x.1, x.2>) = x.2,
+    verify(sign(x.1, x.2), x.1, pk(x.2)) = true
+
+restriction Equality:
+  "∀ x y #i. (Eq( x, y ) @ #i) ⇒ (x = y)"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ x y #i. (Eq( x, y ) @ #i) ⇒ (x = y)"
+  */
+
+restriction CaveatPermits:
+  "∀ c a #i.
+    (Check( c, a ) @ #i) ⇒
+    ((c = a) ∨ (∃ op x. (a = <op, x>) ∧ (c = <op, 'any'>)))"
+
+  /*
+  expanded formula:
+  "∀ c a #i.
+    (Check( c, a ) @ #i) ⇒
+    ((c = a) ∨ (∃ op x. (a = <op, x>) ∧ (c = <op, 'any'>)))"
+  */
+
+restriction ConcreteOperand:
+  "∀ op #i. (Act( <op, 'any'> ) @ #i) ⇒ (⊥)"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ op #i. (Act( <op, 'any'> ) @ #i) ⇒ (⊥)"
+  */
+
+restriction HumanTaskOperandIsConcrete:
+  "∀ H t op #i. (Intends( H, t, <'fixed', op, 'any'> ) @ #i) ⇒ (⊥)"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ H t op #i. (Intends( H, t, <'fixed', op, 'any'> ) @ #i) ⇒ (⊥)"
+  */
+
+restriction UniqueKey:
+  "∀ X #i #j. ((Register( X ) @ #i) ∧ (Register( X ) @ #j)) ⇒ (#i = #j)"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ X #i #j. ((Register( X ) @ #i) ∧ (Register( X ) @ #j)) ⇒ (#i = #j)"
+  */
+
+restriction OneValuePerSourceAndTask:
+  "∀ s t v w #i #j.
+    ((Produced( s, t, v ) @ #i) ∧ (Produced( s, t, w ) @ #j)) ⇒ (#i = #j)"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ s t v w #i #j.
+    ((Produced( s, t, v ) @ #i) ∧ (Produced( s, t, w ) @ #j)) ⇒ (#i = #j)"
+  */
+
+rule (modulo E) Register:
+   [ Fr( ~k ) ]
+  --[ Register( $X ) ]->
+   [ !Ltk( $X, ~k ), !Pk( $X, pk(~k) ), Out( pk(~k) ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Reveal_ltk:
+   [ !Ltk( $X, k ) ] --[ Reveal( $X ) ]-> [ Out( k ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Human_consents_static_task:
+   [ Fr( ~tid ), !Ltk( $H, kH ), !Ltk( 'AS', kAS ) ]
+  --[
+  Intends( $H, ~tid, <'fixed', 'push', $repo> ),
+  RootDelegated( $H, $A1, <'push', 'any'>, ~tid ), TaskStatic( ~tid ),
+  Issued( <'at', $H, 'none', <'agent', $A1>, <'push', 'any'>, 'none', ~tid>
+  )
+  ]->
+   [
+   Out( <<'at', $H, 'none', <'agent', $A1>, <'push', 'any'>, 'none', ~tid>, 
+         sign(<'at', $H, 'none', <'agent', $A1>, <'push', 'any'>, 'none', ~tid>,
+              kAS)
+        >
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Human_consents_dynamic_task:
+   [ Fr( ~tid ), !Ltk( $H, kH ), !Ltk( 'AS', kAS ) ]
+  --[
+  Intends( $H, ~tid, <'hole', 'push', $Src> ),
+  RootDelegated( $H, $A1, <'push', 'any'>, ~tid ), TaskDynamic( ~tid ),
+  Issued( <'at', $H, 'none', <'agent', $A1>, <'push', 'any'>, 'none', ~tid>
+  )
+  ]->
+   [
+   Out( <<'at', $H, 'none', <'agent', $A1>, <'push', 'any'>, 'none', ~tid>, 
+         sign(<'at', $H, 'none', <'agent', $A1>, <'push', 'any'>, 'none', ~tid>,
+              kAS)
+        >
+   ),
+   !TaskOpen( ~tid, $Src )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Source_produces:
+   [ !TaskOpen( tid, $Src ), !Ltk( $Src, ks ) ]
+  --[ Produced( $Src, tid, $v ) ]->
+   [ Out( <'prov', $Src, tid, $v> ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Agent_requests_exchange:
+   [
+   In( <<'at', H, act, aud, sc, cnf, tid>, ss> ), In( <naud, nsc> ),
+   !Ltk( $X, kX ), !Pk( 'AS', pkAS )
+   ]
+  --[
+  Eq( verify(ss, <'at', H, act, aud, sc, cnf, tid>, pkAS), true ),
+  Delegated( $X, naud, tid )
+  ]->
+   [
+   Out( <<'at', H, act, aud, sc, cnf, tid>, ss, 
+         <'xreq', $X, h(<<'at', H, act, aud, sc, cnf, tid>, ss>), naud, nsc>, 
+         sign(<'xreq', $X, h(<<'at', H, act, aud, sc, cnf, tid>, ss>), naud, nsc>,
+              kX)
+        >
+   )
+   ]
+
+  /*
+  rule (modulo AC) Agent_requests_exchange:
+     [
+     In( <<'at', H, act, aud, sc, cnf, tid>, ss> ), In( <naud, nsc> ),
+     !Ltk( $X, kX ), !Pk( 'AS', pkAS )
+     ]
+    --[ Eq( z, true ), Delegated( $X, naud, tid ) ]->
+     [
+     Out( <<'at', H, act, aud, sc, cnf, tid>, ss, 
+           <'xreq', $X, h(<<'at', H, act, aud, sc, cnf, tid>, ss>), naud, nsc>, 
+           sign(<'xreq', $X, h(<<'at', H, act, aud, sc, cnf, tid>, ss>), naud, nsc>,
+                kX)
+          >
+     )
+     ]
+    variants (modulo AC)
+    1. H     = H.28
+       act   = act.29
+       aud   = aud.30
+       cnf   = cnf.31
+       pkAS  = pkAS.35
+       sc    = sc.36
+       ss    = ss.37
+       tid   = tid.38
+       z     = verify(ss.37,
+                      <'at', H.28, act.29, aud.30, sc.36, cnf.31, tid.38>, pkAS.35)
+    
+    2. H     = H.55
+       act   = act.56
+       aud   = aud.57
+       cnf   = cnf.58
+       pkAS  = pk(x.107)
+       sc    = sc.63
+       ss    = sign(<'at', H.55, act.56, aud.57, sc.63, cnf.58, tid.65>, x.107)
+       tid   = tid.65
+       z     = true
+  */
+
+rule (modulo E) Agent_sends_request:
+   [
+   In( <<'at', H, act, aud, sc, cnf, tid>, ts> ), In( <$R, a> ),
+   !Ltk( $X, kX )
+   ]
+  --[ Request( $X, a, tid ) ]->
+   [
+   Out( <'req', a, $R, <'at', H, act, aud, sc, cnf, tid>, ts, 
+         sign(<'dpop', a, $R, h(<<'at', H, act, aud, sc, cnf, tid>, ts>)>, kX)>
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) AS_exchanges:
+   [
+   In( <<'at', H, act, aud, sc, cnf, tid>, ss, 
+        <'xreq', X, h(<<'at', H, act, aud, sc, cnf, tid>, ss>), naud, nsc>, xs>
+   ),
+   !Pk( X, pkX ), !Ltk( 'AS', kAS )
+   ]
+  --[
+  Eq( verify(ss, <'at', H, act, aud, sc, cnf, tid>, pk(kAS)), true ),
+  Eq( verify(xs,
+             <'xreq', X, h(<<'at', H, act, aud, sc, cnf, tid>, ss>), naud, nsc>, pkX),
+      true
+  ),
+  Check( sc, nsc ), Eq( aud, <'agent', X> ),
+  Issued( <'at', H, <'act', X, act>, naud, nsc, 'none', tid> )
+  ]->
+   [
+   Out( <<'at', H, <'act', X, act>, naud, nsc, 'none', tid>, 
+         sign(<'at', H, <'act', X, act>, naud, nsc, 'none', tid>, kAS)>
+   )
+   ]
+
+  /*
+  rule (modulo AC) AS_exchanges:
+     [
+     In( <<'at', H, act, aud, sc, cnf, tid>, ss, 
+          <'xreq', X, h(<<'at', H, act, aud, sc, cnf, tid>, ss>), naud, nsc>, xs>
+     ),
+     !Pk( X, pkX ), !Ltk( 'AS', kAS )
+     ]
+    --[
+    Eq( z, true ), Eq( z.1, true ), Check( sc, nsc ),
+    Eq( aud, <'agent', X> ),
+    Issued( <'at', H, <'act', X, act>, naud, nsc, 'none', tid> )
+    ]->
+     [
+     Out( <<'at', H, <'act', X, act>, naud, nsc, 'none', tid>, 
+           sign(<'at', H, <'act', X, act>, naud, nsc, 'none', tid>, kAS)>
+     )
+     ]
+    variants (modulo AC)
+    1. H     = H.34
+       X     = X.35
+       act   = act.36
+       aud   = aud.37
+       cnf   = cnf.38
+       kAS   = kAS.39
+       naud  = naud.40
+       nsc   = nsc.41
+       pkX   = pkX.42
+       sc    = sc.43
+       ss    = ss.44
+       tid   = tid.45
+       xs    = xs.46
+       z     = verify(ss.44,
+                      <'at', H.34, act.36, aud.37, sc.43, cnf.38, tid.45>, pk(kAS.39))
+       z.1   = verify(xs.46,
+                      <'xreq', X.35, 
+                       h(<<'at', H.34, act.36, aud.37, sc.43, cnf.38, tid.45>, ss.44>), 
+                       naud.40, nsc.41>,
+                      pkX.42)
+    
+    2. H     = H.34
+       X     = X.35
+       act   = act.36
+       aud   = aud.37
+       cnf   = cnf.38
+       kAS   = kAS.39
+       naud  = naud.40
+       nsc   = nsc.41
+       pkX   = pkX.42
+       sc    = sc.43
+       ss    = sign(<'at', H.34, act.36, aud.37, sc.43, cnf.38, tid.45>, kAS.39)
+       tid   = tid.45
+       xs    = xs.46
+       z     = true
+       z.1   = verify(xs.46,
+                      <'xreq', X.35, 
+                       h(<<'at', H.34, act.36, aud.37, sc.43, cnf.38, tid.45>, 
+                          sign(<'at', H.34, act.36, aud.37, sc.43, cnf.38, tid.45>, kAS.39)>), 
+                       naud.40, nsc.41>,
+                      pkX.42)
+    
+    3. H     = H.135
+       X     = X.136
+       act   = act.137
+       aud   = aud.138
+       cnf   = cnf.139
+       kAS   = kAS.140
+       naud  = naud.141
+       nsc   = nsc.142
+       pkX   = pk(x.268)
+       sc    = sc.144
+       ss    = ss.145
+       tid   = tid.146
+       xs    = sign(<'xreq', X.136, 
+                     h(<<'at', H.135, act.137, aud.138, sc.144, cnf.139, tid.146>, ss.145>), 
+                     naud.141, nsc.142>,
+                    x.268)
+       z     = verify(ss.145,
+                      <'at', H.135, act.137, aud.138, sc.144, cnf.139, tid.146>, pk(kAS.140))
+       z.1   = true
+    
+    4. H     = H.135
+       X     = X.136
+       act   = act.137
+       aud   = aud.138
+       cnf   = cnf.139
+       kAS   = kAS.140
+       naud  = naud.141
+       nsc   = nsc.142
+       pkX   = pk(x.268)
+       sc    = sc.144
+       ss    = sign(<'at', H.135, act.137, aud.138, sc.144, cnf.139, tid.146>,
+                    kAS.140)
+       tid   = tid.146
+       xs    = sign(<'xreq', X.136, 
+                     h(<<'at', H.135, act.137, aud.138, sc.144, cnf.139, tid.146>, 
+                        sign(<'at', H.135, act.137, aud.138, sc.144, cnf.139, tid.146>, kAS.140)
+                       >), 
+                     naud.141, nsc.142>,
+                    x.268)
+       z     = true
+       z.1   = true
+  */
+
+rule (modulo E) Resource_accepts_depth0:
+   [
+   In( <'req', a, $R, <'at', H, 'none', aud, sc, cnf, tid>, ts, pr> ),
+   !Pk( 'AS', pkAS )
+   ]
+  --[
+  Eq( verify(ts, <'at', H, 'none', aud, sc, cnf, tid>, pkAS), true ),
+  Check( sc, a ), Act( a ), Accept( $R, H, a, tid ), NoActor( $R, a, tid )
+  ]->
+   [ ]
+
+  /*
+  rule (modulo AC) Resource_accepts_depth0:
+     [
+     In( <'req', a, $R, <'at', H, 'none', aud, sc, cnf, tid>, ts, pr> ),
+     !Pk( 'AS', pkAS )
+     ]
+    --[
+    Eq( z, true ), Check( sc, a ), Act( a ), Accept( $R, H, a, tid ),
+    NoActor( $R, a, tid )
+    ]->
+     [ ]
+    variants (modulo AC)
+    1. H     = H.25
+       aud   = aud.27
+       cnf   = cnf.28
+       pkAS  = pkAS.29
+       sc    = sc.31
+       tid   = tid.32
+       ts    = ts.33
+       z     = verify(ts.33,
+                      <'at', H.25, 'none', aud.27, sc.31, cnf.28, tid.32>, pkAS.29)
+    
+    2. H     = H.63
+       aud   = aud.65
+       cnf   = cnf.66
+       pkAS  = pk(x.123)
+       sc    = sc.69
+       tid   = tid.70
+       ts    = sign(<'at', H.63, 'none', aud.65, sc.69, cnf.66, tid.70>, x.123)
+       z     = true
+  */
+
+rule (modulo E) Resource_accepts_depth1:
+   [
+   In( <'req', a, $R, <'at', H, <'act', P, 'none'>, aud, sc, cnf, tid>, ts, 
+        pr>
+   ),
+   !Pk( 'AS', pkAS )
+   ]
+  --[
+  Eq( verify(ts, <'at', H, <'act', P, 'none'>, aud, sc, cnf, tid>, pkAS),
+      true
+  ),
+  Check( sc, a ), Act( a ), Accept( $R, P, a, tid )
+  ]->
+   [ ]
+
+  /*
+  rule (modulo AC) Resource_accepts_depth1:
+     [
+     In( <'req', a, $R, <'at', H, <'act', P, 'none'>, aud, sc, cnf, tid>, ts, 
+          pr>
+     ),
+     !Pk( 'AS', pkAS )
+     ]
+    --[ Eq( z, true ), Check( sc, a ), Act( a ), Accept( $R, P, a, tid ) ]->
+     [ ]
+    variants (modulo AC)
+    1. H     = H.28
+       P     = P.29
+       aud   = aud.31
+       cnf   = cnf.32
+       pkAS  = pkAS.33
+       sc    = sc.35
+       tid   = tid.36
+       ts    = ts.37
+       z     = verify(ts.37,
+                      <'at', H.28, <'act', P.29, 'none'>, aud.31, sc.35, cnf.32, tid.36>,
+                      pkAS.33)
+    
+    2. H     = H.88
+       P     = P.89
+       aud   = aud.91
+       cnf   = cnf.92
+       pkAS  = pk(x.173)
+       sc    = sc.95
+       tid   = tid.96
+       ts    = sign(<'at', H.88, <'act', P.89, 'none'>, aud.91, sc.95, cnf.92, 
+                     tid.96>,
+                    x.173)
+       z     = true
+  */
+
+rule (modulo E) Resource_accepts_depth2:
+   [
+   In( <'req', a, $R, 
+        <'at', H, <'act', P, 'act', Q, 'none'>, aud, sc, cnf, tid>, ts, pr>
+   ),
+   !Pk( 'AS', pkAS )
+   ]
+  --[
+  Eq( verify(ts,
+             <'at', H, <'act', P, 'act', Q, 'none'>, aud, sc, cnf, tid>, pkAS),
+      true
+  ),
+  Check( sc, a ), Act( a ), Accept( $R, P, a, tid ),
+  Chain( $R, H, Q, P, tid )
+  ]->
+   [ ]
+
+  /*
+  rule (modulo AC) Resource_accepts_depth2:
+     [
+     In( <'req', a, $R, 
+          <'at', H, <'act', P, 'act', Q, 'none'>, aud, sc, cnf, tid>, ts, pr>
+     ),
+     !Pk( 'AS', pkAS )
+     ]
+    --[
+    Eq( z, true ), Check( sc, a ), Act( a ), Accept( $R, P, a, tid ),
+    Chain( $R, H, Q, P, tid )
+    ]->
+     [ ]
+    variants (modulo AC)
+    1. H     = H.30
+       P     = P.31
+       Q     = Q.32
+       aud   = aud.34
+       cnf   = cnf.35
+       pkAS  = pkAS.36
+       sc    = sc.38
+       tid   = tid.39
+       ts    = ts.40
+       z     = verify(ts.40,
+                      <'at', H.30, <'act', P.31, 'act', Q.32, 'none'>, aud.34, sc.38, cnf.35, 
+                       tid.39>,
+                      pkAS.36)
+    
+    2. H     = H.94
+       P     = P.95
+       Q     = Q.96
+       aud   = aud.98
+       cnf   = cnf.99
+       pkAS  = pk(x.185)
+       sc    = sc.102
+       tid   = tid.103
+       ts    = sign(<'at', H.94, <'act', P.95, 'act', Q.96, 'none'>, aud.98, 
+                     sc.102, cnf.99, tid.103>,
+                    x.185)
+       z     = true
+  */
+
+rule (modulo E) Resource_accepts_depth3plus:
+   [
+   In( <'req', a, $R, 
+        <'at', H, <'act', P, 'act', Q, 'act', Z, rest>, aud, sc, cnf, tid>, ts, 
+        pr>
+   ),
+   !Pk( 'AS', pkAS )
+   ]
+  --[
+  Eq( verify(ts,
+             <'at', H, <'act', P, 'act', Q, 'act', Z, rest>, aud, sc, cnf, tid>,
+             pkAS),
+      true
+  ),
+  Check( sc, a ), Act( a ), Accept( $R, P, a, tid )
+  ]->
+   [ ]
+
+  /*
+  rule (modulo AC) Resource_accepts_depth3plus:
+     [
+     In( <'req', a, $R, 
+          <'at', H, <'act', P, 'act', Q, 'act', Z, rest>, aud, sc, cnf, tid>, ts, 
+          pr>
+     ),
+     !Pk( 'AS', pkAS )
+     ]
+    --[ Eq( z, true ), Check( sc, a ), Act( a ), Accept( $R, P, a, tid ) ]->
+     [ ]
+    variants (modulo AC)
+    1. H     = H.33
+       P     = P.34
+       Q     = Q.35
+       Z     = Z.36
+       aud   = aud.38
+       cnf   = cnf.39
+       pkAS  = pkAS.40
+       rest  = rest.42
+       sc    = sc.43
+       tid   = tid.44
+       ts    = ts.45
+       z     = verify(ts.45,
+                      <'at', H.33, <'act', P.34, 'act', Q.35, 'act', Z.36, rest.42>, aud.38, 
+                       sc.43, cnf.39, tid.44>,
+                      pkAS.40)
+    
+    2. H     = H.82
+       P     = P.83
+       Q     = Q.84
+       Z     = Z.85
+       aud   = aud.87
+       cnf   = cnf.88
+       pkAS  = pk(x.161)
+       rest  = rest.91
+       sc    = sc.92
+       tid   = tid.93
+       ts    = sign(<'at', H.82, 
+                     <'act', P.83, 'act', Q.84, 'act', Z.85, rest.91>, aud.87, sc.92, cnf.88, 
+                     tid.93>,
+                    x.161)
+       z     = true
+  */
+
+lemma issued_scope_within_human_consent [use_induction, reuse]:
+  all-traces
+  "∀ H act aud sc cnf tid #i.
+    (Issued( <'at', H, act, aud, sc, cnf, tid> ) @ #i) ⇒
+    ((∃ A1 c #j.
+       (RootDelegated( H, A1, c, tid ) @ #j) ∧
+       ((c = sc) ∨ (∃ op x. (sc = <op, x>) ∧ (c = <op, 'any'>)))) ∨
+     (∃ #r. Reveal( 'AS' ) @ #r))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ H act aud sc cnf tid #i.
+  (Issued( <'at', H, act, aud, sc, cnf, tid> ) @ #i)
+ ∧
+  (∀ A1 c #j.
+    (RootDelegated( H, A1, c, tid ) @ #j)
+   ⇒
+    (¬(c = sc)) ∧ (∀ op x. (sc = <op, x>) ∧ (c = <op, 'any'>) ⇒ ⊥)) ∧
+  (∀ #r. (Reveal( 'AS' ) @ #r) ⇒ ⊥)"
+*/
+by sorry
+
+lemma executable_static_task_conformant_two_hops:
+  exists-trace
+  "∃ R H A1 A2 a tid #i #j #k.
+    ((((Accept( R, A2, a, tid ) @ #i) ∧ (Chain( R, H, A1, A2, tid ) @ #i)) ∧
+      (TaskStatic( tid ) @ #j)) ∧
+     (Intends( H, tid, <'fixed', a> ) @ #k)) ∧
+    (¬(A1 = A2))"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ R H A1 A2 a tid #i #j #k.
+  (Accept( R, A2, a, tid ) @ #i) ∧
+  (Chain( R, H, A1, A2, tid ) @ #i) ∧
+  (TaskStatic( tid ) @ #j) ∧
+  (Intends( H, tid, <'fixed', a> ) @ #k)
+ ∧
+  ¬(A1 = A2)"
+*/
+by sorry
+
+lemma executable_dynamic_task_conformant_two_hops:
+  exists-trace
+  "∃ R H A1 A2 op v S tid #i #k #l.
+    ((((Accept( R, A2, <op, v>, tid ) @ #i) ∧
+       (Chain( R, H, A1, A2, tid ) @ #i)) ∧
+      (Intends( H, tid, <'hole', op, S> ) @ #k)) ∧
+     (Produced( S, tid, v ) @ #l)) ∧
+    (¬(A1 = A2))"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ R H A1 A2 op v S tid #i #k #l.
+  (Accept( R, A2, <op, v>, tid ) @ #i) ∧
+  (Chain( R, H, A1, A2, tid ) @ #i) ∧
+  (Intends( H, tid, <'hole', op, S> ) @ #k) ∧
+  (Produced( S, tid, v ) @ #l)
+ ∧
+  ¬(A1 = A2)"
+*/
+by sorry
+
+lemma first_actor_was_root_delegate [reuse]:
+  all-traces
+  "∀ H X aud sc cnf tid #i.
+    (Issued( <'at', H, <'act', X, 'none'>, aud, sc, cnf, tid> ) @ #i) ⇒
+    ((∃ c #j. (RootDelegated( H, X, c, tid ) @ #j) ∧ (#j < #i)) ∨
+     (∃ #r. Reveal( 'AS' ) @ #r))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ H X aud sc cnf tid #i.
+  (Issued( <'at', H, <'act', X, 'none'>, aud, sc, cnf, tid> ) @ #i)
+ ∧
+  (∀ c #j. (RootDelegated( H, X, c, tid ) @ #j) ⇒ ¬(#j < #i)) ∧
+  (∀ #r. (Reveal( 'AS' ) @ #r) ⇒ ⊥)"
+*/
+by sorry
+
+lemma later_actor_was_delegated_by_previous [reuse]:
+  all-traces
+  "∀ H X Y rest aud sc cnf tid #i.
+    (Issued( <'at', H, <'act', X, 'act', Y, rest>, aud, sc, cnf, tid>
+     ) @ #i) ⇒
+    (((∃ #j. (Delegated( Y, <'agent', X>, tid ) @ #j) ∧ (#j < #i)) ∨
+      (∃ #r. Reveal( 'AS' ) @ #r)) ∨
+     (∃ #r. Reveal( Y ) @ #r))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ H X Y rest aud sc cnf tid #i.
+  (Issued( <'at', H, <'act', X, 'act', Y, rest>, aud, sc, cnf, tid> ) @ #i)
+ ∧
+  (∀ #j. (Delegated( Y, <'agent', X>, tid ) @ #j) ⇒ ¬(#j < #i)) ∧
+  (∀ #r. (Reveal( 'AS' ) @ #r) ⇒ ⊥) ∧
+  (∀ #r. (Reveal( Y ) @ #r) ⇒ ⊥)"
+*/
+by sorry
+
+lemma kc_witness_chain_party_reveal_breaks_AUTH:
+  exists-trace
+  "∃ R H A1 A2 tid #i #r.
+    ((Chain( R, H, A1, A2, tid ) @ #i) ∧ (Reveal( A1 ) @ #r)) ∧
+    (¬(∃ #e. Delegated( A1, <'agent', A2>, tid ) @ #e))"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ R H A1 A2 tid #i #r.
+  (Chain( R, H, A1, A2, tid ) @ #i) ∧ (Reveal( A1 ) @ #r)
+ ∧
+  ∀ #e. (Delegated( A1, <'agent', A2>, tid ) @ #e) ⇒ ⊥"
+*/
+simplify
+solve( (sc = a)  ∥ (∃ op x. (a = <op, x>) ∧ (sc = <op, 'any'>)) )
+  case case_1
+  solve( !Pk( 'AS', pk(x) ) ▶₁ #i )
+    case Register
+    solve( !Ltk( $X, k.1 ) ▶₀ #r )
+      case Register
+      solve( !KU( sign(<'at', H, <'act', A2, 'act', $X, 'none'>, aud, a, cnf, 
+                        tid>,
+                       ~k)
+             ) @ #vk.27 )
+        case c_sign
+        solve( !KU( ~k ) @ #vk.29 )
+          case Reveal_ltk
+          SOLVED // trace found
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma kc_witness_actor_reveal_breaks_ATTR:
+  exists-trace
+  "∃ R P a tid #i #r.
+    ((Accept( R, P, a, tid ) @ #i) ∧ (Reveal( P ) @ #r)) ∧
+    (¬(∃ #j. Request( P, a, tid ) @ #j))"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ R P a tid #i #r.
+  (Accept( R, P, a, tid ) @ #i) ∧ (Reveal( P ) @ #r)
+ ∧
+  ∀ #j. (Request( P, a, tid ) @ #j) ⇒ ⊥"
+*/
+by sorry
+
+lemma kc_witness_as_reveal_breaks_TASK_static:
+  exists-trace
+  "∃ R P a tid #i #j #r.
+    (((Accept( R, P, a, tid ) @ #i) ∧ (TaskStatic( tid ) @ #j)) ∧
+     (Reveal( 'AS' ) @ #r)) ∧
+    (¬(∃ H #k. Intends( H, tid, <'fixed', a> ) @ #k))"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ R P a tid #i #j #r.
+  (Accept( R, P, a, tid ) @ #i) ∧
+  (TaskStatic( tid ) @ #j) ∧
+  (Reveal( 'AS' ) @ #r)
+ ∧
+  ∀ H #k. (Intends( H, tid, <'fixed', a> ) @ #k) ⇒ ⊥"
+*/
+by sorry
+
+lemma witness_splice_chain_names_undelegated_hop:
+  exists-trace
+  "∃ R H A1 A2 A3 tid #i #d.
+    ((((((Chain( R, H, A1, A2, tid ) @ #i) ∧
+         (Delegated( A1, <'agent', A3>, tid ) @ #d)) ∧
+        (¬(A2 = A3))) ∧
+       (¬(∃ #e. Delegated( A1, <'agent', A2>, tid ) @ #e))) ∧
+      (¬(∃ #r. Reveal( 'AS' ) @ #r))) ∧
+     (¬(∃ #r. Reveal( A1 ) @ #r))) ∧
+    (¬(∃ #r. Reveal( A2 ) @ #r))"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ R H A1 A2 A3 tid #i #d.
+  (Chain( R, H, A1, A2, tid ) @ #i) ∧
+  (Delegated( A1, <'agent', A3>, tid ) @ #d)
+ ∧
+  (¬(A2 = A3)) ∧
+  (∀ #e. (Delegated( A1, <'agent', A2>, tid ) @ #e) ⇒ ⊥) ∧
+  (∀ #r. (Reveal( 'AS' ) @ #r) ⇒ ⊥) ∧
+  (∀ #r. (Reveal( A1 ) @ #r) ⇒ ⊥) ∧
+  (∀ #r. (Reveal( A2 ) @ #r) ⇒ ⊥)"
+*/
+by sorry
+
+lemma witness_act_stripping_logs_human:
+  exists-trace
+  "∃ R H A1 a tid #i #q.
+    (((((Accept( R, H, a, tid ) @ #i) ∧ (NoActor( R, a, tid ) @ #i)) ∧
+       (Request( A1, a, tid ) @ #q)) ∧
+      (¬(A1 = H))) ∧
+     (¬(∃ #r. Reveal( 'AS' ) @ #r))) ∧
+    (¬(∃ #r. Reveal( A1 ) @ #r))"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ R H A1 a tid #i #q.
+  (Accept( R, H, a, tid ) @ #i) ∧
+  (NoActor( R, a, tid ) @ #i) ∧
+  (Request( A1, a, tid ) @ #q)
+ ∧
+  (¬(A1 = H)) ∧
+  (∀ #r. (Reveal( 'AS' ) @ #r) ⇒ ⊥) ∧
+  (∀ #r. (Reveal( A1 ) @ #r) ⇒ ⊥)"
+*/
+by sorry
+
+lemma AUTH_nested_act_chain_was_delegated:
+  all-traces
+  "∀ R H A1 A2 tid #i.
+    (Chain( R, H, A1, A2, tid ) @ #i) ⇒
+    (((((∃ c #j. (RootDelegated( H, A1, c, tid ) @ #j) ∧ (#j < #i)) ∧
+        (∃ #k. (Delegated( A1, <'agent', A2>, tid ) @ #k) ∧ (#k < #i))) ∨
+       (∃ #r. Reveal( 'AS' ) @ #r)) ∨
+      (∃ #r. Reveal( A1 ) @ #r)) ∨
+     (∃ #r. Reveal( A2 ) @ #r))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ R H A1 A2 tid #i.
+  (Chain( R, H, A1, A2, tid ) @ #i)
+ ∧
+  (((∀ c #j. (RootDelegated( H, A1, c, tid ) @ #j) ⇒ ¬(#j < #i)) ∨
+    (∀ #k. (Delegated( A1, <'agent', A2>, tid ) @ #k) ⇒ ¬(#k < #i)))) ∧
+  (∀ #r. (Reveal( 'AS' ) @ #r) ⇒ ⊥) ∧
+  (∀ #r. (Reveal( A1 ) @ #r) ⇒ ⊥) ∧
+  (∀ #r. (Reveal( A2 ) @ #r) ⇒ ⊥)"
+*/
+by sorry
+
+lemma NOESC_action_within_human_consent:
+  all-traces
+  "∀ R P a tid #i.
+    (Accept( R, P, a, tid ) @ #i) ⇒
+    ((∃ H A1 c #j.
+       (RootDelegated( H, A1, c, tid ) @ #j) ∧
+       ((c = a) ∨ (∃ op x. (a = <op, x>) ∧ (c = <op, 'any'>)))) ∨
+     (∃ #r. Reveal( 'AS' ) @ #r))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ R P a tid #i.
+  (Accept( R, P, a, tid ) @ #i)
+ ∧
+  (∀ H A1 c #j.
+    (RootDelegated( H, A1, c, tid ) @ #j)
+   ⇒
+    (¬(c = a)) ∧ (∀ op x. (a = <op, x>) ∧ (c = <op, 'any'>) ⇒ ⊥)) ∧
+  (∀ #r. (Reveal( 'AS' ) @ #r) ⇒ ⊥)"
+*/
+by sorry
+
+lemma ATTR_logged_current_actor_sent_request:
+  all-traces
+  "∀ R P a tid #i.
+    (Accept( R, P, a, tid ) @ #i) ⇒
+    (((∃ #j. (Request( P, a, tid ) @ #j) ∧ (#j < #i)) ∨
+      (∃ #r. Reveal( 'AS' ) @ #r)) ∨
+     (∃ #r. Reveal( P ) @ #r))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ R P a tid #i.
+  (Accept( R, P, a, tid ) @ #i)
+ ∧
+  (∀ #j. (Request( P, a, tid ) @ #j) ⇒ ¬(#j < #i)) ∧
+  (∀ #r. (Reveal( 'AS' ) @ #r) ⇒ ⊥) ∧
+  (∀ #r. (Reveal( P ) @ #r) ⇒ ⊥)"
+*/
+by sorry
+
+lemma TASK_static_task:
+  all-traces
+  "∀ R P a tid #i #j.
+    ((Accept( R, P, a, tid ) @ #i) ∧ (TaskStatic( tid ) @ #j)) ⇒
+    ((∃ H #k. Intends( H, tid, <'fixed', a> ) @ #k) ∨
+     (∃ #r. Reveal( 'AS' ) @ #r))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ R P a tid #i #j.
+  (Accept( R, P, a, tid ) @ #i) ∧ (TaskStatic( tid ) @ #j)
+ ∧
+  (∀ H #k. (Intends( H, tid, <'fixed', a> ) @ #k) ⇒ ⊥) ∧
+  (∀ #r. (Reveal( 'AS' ) @ #r) ⇒ ⊥)"
+*/
+by sorry
+
+lemma TASK_dynamic_task:
+  all-traces
+  "∀ R P op v tid #i #j.
+    ((Accept( R, P, <op, v>, tid ) @ #i) ∧ (TaskDynamic( tid ) @ #j)) ⇒
+    ((∃ H S #k #l.
+       (Intends( H, tid, <'hole', op, S> ) @ #k) ∧
+       (Produced( S, tid, v ) @ #l)) ∨
+     (∃ #r. Reveal( 'AS' ) @ #r))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ R P op v tid #i #j.
+  (Accept( R, P, <op, v>, tid ) @ #i) ∧ (TaskDynamic( tid ) @ #j)
+ ∧
+  (∀ H S #k #l.
+    (Intends( H, tid, <'hole', op, S> ) @ #k) ∧ (Produced( S, tid, v ) @ #l)
+   ⇒
+    ⊥) ∧
+  (∀ #r. (Reveal( 'AS' ) @ #r) ⇒ ⊥)"
+*/
+by sorry
+
+/* All wellformedness checks were successful. */
+
+/*
+Generated from:
+Tamarin version 1.12.0
+Maude version 3.5.1
+Git revision: 82780bbaf3328a45f624ddb41e51bf75425f851c (with uncommited changes), branch: master
+Compiled at: 2026-03-07 14:22:39.174278293 UTC
+*/
+
+end
+
+==============================================================================
+summary of summaries:
+
+analyzed: generated/rfc8693_kc/RFC8693_kc_mayact.spthy
+
+  processing time: 1.52s
+  
+  issued_scope_within_human_consent (all-traces): analysis incomplete (1 steps)
+  executable_static_task_conformant_two_hops (exists-trace): analysis incomplete (1 steps)
+  executable_dynamic_task_conformant_two_hops (exists-trace): analysis incomplete (1 steps)
+  first_actor_was_root_delegate (all-traces): analysis incomplete (1 steps)
+  later_actor_was_delegated_by_previous (all-traces): analysis incomplete (1 steps)
+  kc_witness_chain_party_reveal_breaks_AUTH (exists-trace): verified (7 steps)
+  kc_witness_actor_reveal_breaks_ATTR (exists-trace): analysis incomplete (1 steps)
+  kc_witness_as_reveal_breaks_TASK_static (exists-trace): analysis incomplete (1 steps)
+  witness_splice_chain_names_undelegated_hop (exists-trace): analysis incomplete (1 steps)
+  witness_act_stripping_logs_human (exists-trace): analysis incomplete (1 steps)
+  AUTH_nested_act_chain_was_delegated (all-traces): analysis incomplete (1 steps)
+  NOESC_action_within_human_consent (all-traces): analysis incomplete (1 steps)
+  ATTR_logged_current_actor_sent_request (all-traces): analysis incomplete (1 steps)
+  TASK_static_task (all-traces): analysis incomplete (1 steps)
+  TASK_dynamic_task (all-traces): analysis incomplete (1 steps)
+
+==============================================================================

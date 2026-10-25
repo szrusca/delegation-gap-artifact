@@ -1,0 +1,405 @@
+maude tool: 'maude'
+ checking version: 3.5.1. OK.
+ checking installation: OK.
+diffLemma
+[Theory Separation] Theory loaded
+[Theory Separation] Theory translated
+[Theory Separation] Theory closed
+[Saturating Sources] Step 1 (Max 5)
+[Saturating Sources] Step 1 (Max 5)
+[Saturating Sources] Step 1 (Max 5)
+[Saturating Sources] Done
+[Saturating Sources] Step 1 (Max 5)
+[Saturating Sources] Done
+[Saturating Sources] Done
+[Saturating Sources] Done
+theory Separation
+
+begin
+
+// Function signature and definition of the equational theory E
+
+functions: fst/1, h/1, pair/2, pk/1, sign/2, snd/1, true/0, verify/3
+equations:
+    fst(<x.1, x.2>) = x.1,
+    snd(<x.1, x.2>) = x.2,
+    verify(sign(x.1, x.2), x.1, pk(x.2)) = true
+
+restriction Equality [right]:
+  "∀ x y #i. (Eq( x, y ) @ #i) ⇒ (x = y)"
+  // safety formula
+
+restriction Equality [left]:
+  "∀ x y #i. (Eq( x, y ) @ #i) ⇒ (x = y)"
+  // safety formula
+
+restriction UniqueKey [right]:
+  "∀ X #i #j. ((Register( X ) @ #i) ∧ (Register( X ) @ #j)) ⇒ (#i = #j)"
+  // safety formula
+
+restriction UniqueKey [left]:
+  "∀ X #i #j. ((Register( X ) @ #i) ∧ (Register( X ) @ #j)) ⇒ (#i = #j)"
+  // safety formula
+
+restriction OneTrackerAnswerPerTask [right]:
+  "∀ t #i #j.
+    ((TrackerAnswered( t ) @ #i) ∧ (TrackerAnswered( t ) @ #j)) ⇒ (#i = #j)"
+  // safety formula
+
+restriction OneTrackerAnswerPerTask [left]:
+  "∀ t #i #j.
+    ((TrackerAnswered( t ) @ #i) ∧ (TrackerAnswered( t ) @ #j)) ⇒ (#i = #j)"
+  // safety formula
+
+rule (modulo E) Register:
+   [ Fr( ~k ) ]
+  --[ Register( $X ) ]->
+   [ !Ltk( $X, ~k ), !Pk( $X, pk(~k) ), Out( pk(~k) ) ]
+
+rule (modulo E) Human_dynamic_task:
+   [ Fr( ~tid ), !Ltk( $H, kH ) ]
+  --[ Intends( $H, ~tid, <'hole', 'push', 'tracker'> ) ]->
+   [
+   Out( <<'root', $H, $A1, <'push', 'any'>, ~tid>, 
+         sign(<'root', $H, $A1, <'push', 'any'>, ~tid>, kH)>
+   ),
+   Out( <<'cap', $H, ~tid, 'hole', 'push', 'tracker'>, 
+         sign(<'cap', $H, ~tid, 'hole', 'push', 'tracker'>, kH)>
+   ),
+   !Task( ~tid )
+   ]
+
+rule (modulo E) Tracker_answers_with_provenance:
+   [ !Task( tid ), !Ltk( 'tracker', ks ) ]
+  --[
+  TrackerAnswered( tid ),
+  Produced( 'tracker', tid, diff('repoY', 'repoX') )
+  ]->
+   [
+   AgentReads( tid, diff('repoY', 'repoX') ),
+   Out( <<'prov', 'tracker', tid, diff('repoY', 'repoX')>, 
+         sign(<'prov', 'tracker', tid, diff('repoY', 'repoX')>, ks)>
+   )
+   ]
+
+rule (modulo E) Agent1_steered_delegation:
+   [
+   In( <<'root', H, $A1, c1, tid>, s1> ), In( <A2, c2> ), !Pk( H, pkH ),
+   !Ltk( $A1, k1 )
+   ]
+  --[ Eq( verify(s1, <'root', H, $A1, c1, tid>, pkH), true ) ]->
+   [
+   Out( <<'del', $A1, A2, c2, h(<<'root', H, $A1, c1, tid>, s1>)>, 
+         sign(<'del', $A1, A2, c2, h(<<'root', H, $A1, c1, tid>, s1>)>, k1)>
+   )
+   ]
+
+rule (modulo E) Agent2_steered_request:
+   [
+   In( <<'root', H, A1, c1, tid>, s1, 
+        <'del', A1, $A2, c2, h(<<'root', H, A1, c1, tid>, s1>)>, s2>
+   ),
+   In( <$R, a> ), AgentReads( tid, observed ), !Pk( H, pkH ),
+   !Pk( A1, pkA1 ), !Ltk( $A2, k2 )
+   ]
+  --[
+  Eq( verify(s1, <'root', H, A1, c1, tid>, pkH), true ),
+  Eq( verify(s2, <'del', A1, $A2, c2, h(<<'root', H, A1, c1, tid>, s1>)>,
+             pkA1),
+      true
+  ),
+  Request( $A2, a, tid )
+  ]->
+   [
+   Out( <'req', a, <'root', H, A1, c1, tid>, s1, 
+         <'del', A1, $A2, c2, h(<<'root', H, A1, c1, tid>, s1>)>, s2, 
+         sign(<'req', a, $R, 
+               h(<<'root', H, A1, c1, tid>, s1, 
+                  <'del', A1, $A2, c2, h(<<'root', H, A1, c1, tid>, s1>)>, s2>)
+              >,
+              k2)
+        >
+   )
+   ]
+
+rule (modulo E) Resource_accepts_with_provenance:
+   [
+   In( <'req', <'push', v>, <'root', H, A1, <'push', 'any'>, tid>, s1, 
+        <'del', A1, A2, c2, h(<<'root', H, A1, <'push', 'any'>, tid>, s1>)>, s2, 
+        sr>
+   ),
+   In( <<'cap', H, tid, 'hole', 'push', S>, sc> ),
+   In( <<'prov', S, tid, v>, sp> ), !Pk( H, pkH ), !Pk( A1, pkA1 ),
+   !Pk( A2, pkA2 ), !Pk( S, pkS )
+   ]
+  --[
+  Eq( verify(s1, <'root', H, A1, <'push', 'any'>, tid>, pkH), true ),
+  Eq( verify(s2,
+             <'del', A1, A2, c2, h(<<'root', H, A1, <'push', 'any'>, tid>, s1>)>,
+             pkA1),
+      true
+  ),
+  Eq( verify(sr,
+             <'req', <'push', v>, $R, 
+              h(<<'root', H, A1, <'push', 'any'>, tid>, s1, 
+                 <'del', A1, A2, c2, h(<<'root', H, A1, <'push', 'any'>, tid>, s1>)>, s2>)
+             >,
+             pkA2),
+      true
+  ),
+  Eq( verify(sc, <'cap', H, tid, 'hole', 'push', S>, pkH), true ),
+  Eq( verify(sp, <'prov', S, tid, v>, pkS), true ),
+  Accept( $R, A2, <'push', v>, tid )
+  ]->
+   [ Out( <'accepted', $R, <'push', v>, tid> ) ]
+
+lemma verifier_accepts_conformant_push_to_repoY [right]:
+  exists-trace
+  "∃ R P tid #i #j.
+    (Accept( R, P, <'push', 'repoY'>, tid ) @ #i) ∧
+    (Produced( 'tracker', tid, 'repoY' ) @ #j)"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ R P tid #i #j.
+  (Accept( R, P, <'push', 'repoY'>, tid ) @ #i) ∧
+  (Produced( 'tracker', tid, 'repoY' ) @ #j)"
+*/
+by simplify
+
+lemma verifier_accepts_conformant_push_to_repoY [left]:
+  exists-trace
+  "∃ R P tid #i #j.
+    (Accept( R, P, <'push', 'repoY'>, tid ) @ #i) ∧
+    (Produced( 'tracker', tid, 'repoY' ) @ #j)"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ R P tid #i #j.
+  (Accept( R, P, <'push', 'repoY'>, tid ) @ #i) ∧
+  (Produced( 'tracker', tid, 'repoY' ) @ #j)"
+*/
+simplify
+solve( !Pk( H, pk(x) ) ▶₃ #i )
+  case Register
+  solve( !Pk( A1, pk(x) ) ▶₄ #i )
+    case Register
+    solve( !Pk( P, pk(x) ) ▶₅ #i )
+      case Register
+      solve( !Pk( S, pk(x) ) ▶₆ #i )
+        case Register
+        solve( !Task( tid ) ▶₀ #j )
+          case Human_dynamic_task
+          solve( !Ltk( 'tracker', ks ) ▶₁ #j )
+            case Register
+            solve( !KU( sign(<'root', $X, $X.1, <'push', 'any'>, ~tid>, ~k)
+                   ) @ #vk.31 )
+              case Human_dynamic_task
+              solve( !KU( sign(<'del', $A1, $X, c2, 
+                                h(<<'root', $H, $A1, <'push', 'any'>, ~tid>, 
+                                   sign(<'root', $H, $A1, <'push', 'any'>, ~tid>, ~k)>)
+                               >,
+                               ~k.1)
+                     ) @ #vk.39 )
+                case Agent1_steered_delegation
+                solve( !KU( sign(<'req', <'push', 'repoY'>, $R, 
+                                  h(<<'root', $H, $A1, <'push', 'any'>, ~tid>, 
+                                     sign(<'root', $H, $A1, <'push', 'any'>, ~tid>, ~k), 
+                                     <'del', $A1, $X, c2, 
+                                      h(<<'root', $H, $A1, <'push', 'any'>, ~tid>, 
+                                         sign(<'root', $H, $A1, <'push', 'any'>, ~tid>, ~k)>)
+                                     >, 
+                                     sign(<'del', $A1, $X, c2, 
+                                           h(<<'root', $H, $A1, <'push', 'any'>, ~tid>, 
+                                              sign(<'root', $H, $A1, <'push', 'any'>, ~tid>, ~k)>)
+                                          >,
+                                          ~k.1)
+                                    >)
+                                 >,
+                                 ~k.2)
+                       ) @ #vk.42 )
+                  case Agent2_steered_request
+                  solve( !KU( sign(<'cap', $H, ~tid, 'hole', 'push', $X.1>, ~k)
+                         ) @ #vk.50 )
+                    case Human_dynamic_task
+                    solve( !KU( ~tid ) @ #vk.40 )
+                      case Human_dynamic_task_case_1
+                      solve( !KU( sign(<'prov', 'tracker', ~tid, 'repoY'>, ~k.3) ) @ #vk.52 )
+                        case Tracker_answers_with_provenance
+                        solve( !KU( h(<<'root', $H, $A1, <'push', 'any'>, ~tid>, 
+                                       sign(<'root', $H, $A1, <'push', 'any'>, ~tid>, ~k)>)
+                               ) @ #vk.48 )
+                          case Agent1_steered_delegation
+                          SOLVED // trace found
+                        qed
+                      qed
+                    qed
+                  qed
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma verifier_accepts_nonconformant_push_to_repoY [right]:
+  exists-trace
+  "∃ R P tid #i #j.
+    (Accept( R, P, <'push', 'repoY'>, tid ) @ #i) ∧
+    (Produced( 'tracker', tid, 'repoX' ) @ #j)"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ R P tid #i #j.
+  (Accept( R, P, <'push', 'repoY'>, tid ) @ #i) ∧
+  (Produced( 'tracker', tid, 'repoX' ) @ #j)"
+*/
+simplify
+solve( !Pk( H, pk(x) ) ▶₃ #i )
+  case Register
+  solve( !Pk( A1, pk(x) ) ▶₄ #i )
+    case Register
+    solve( !Pk( P, pk(x) ) ▶₅ #i )
+      case Register
+      solve( !Pk( S, pk(x) ) ▶₆ #i )
+        case Register
+        solve( !Task( tid ) ▶₀ #j )
+          case Human_dynamic_task
+          solve( !Ltk( 'tracker', ks ) ▶₁ #j )
+            case Register
+            solve( !KU( sign(<'root', $X, $X.1, <'push', 'any'>, ~tid>, ~k)
+                   ) @ #vk.31 )
+              case Human_dynamic_task
+              solve( !KU( sign(<'del', $A1, $X, c2, 
+                                h(<<'root', $H, $A1, <'push', 'any'>, ~tid>, 
+                                   sign(<'root', $H, $A1, <'push', 'any'>, ~tid>, ~k)>)
+                               >,
+                               ~k.1)
+                     ) @ #vk.39 )
+                case Agent1_steered_delegation
+                solve( !KU( sign(<'req', <'push', 'repoY'>, $R, 
+                                  h(<<'root', $H, $A1, <'push', 'any'>, ~tid>, 
+                                     sign(<'root', $H, $A1, <'push', 'any'>, ~tid>, ~k), 
+                                     <'del', $A1, $X, c2, 
+                                      h(<<'root', $H, $A1, <'push', 'any'>, ~tid>, 
+                                         sign(<'root', $H, $A1, <'push', 'any'>, ~tid>, ~k)>)
+                                     >, 
+                                     sign(<'del', $A1, $X, c2, 
+                                           h(<<'root', $H, $A1, <'push', 'any'>, ~tid>, 
+                                              sign(<'root', $H, $A1, <'push', 'any'>, ~tid>, ~k)>)
+                                          >,
+                                          ~k.1)
+                                    >)
+                                 >,
+                                 ~k.2)
+                       ) @ #vk.42 )
+                  case Agent2_steered_request
+                  solve( !KU( sign(<'cap', $H, ~tid, 'hole', 'push', $X.1>, ~k)
+                         ) @ #vk.50 )
+                    case Human_dynamic_task
+                    solve( !KU( sign(<'prov', 'tracker', ~tid, 'repoY'>, ~k.3) ) @ #vk.52 )
+                      case c_sign
+                      by solve( !KU( ~k.3 ) @ #vk.54 )
+                    qed
+                  next
+                    case c_sign
+                    by solve( !KU( ~k ) @ #vk.54 )
+                  qed
+                next
+                  case c_sign
+                  by solve( !KU( ~k.2 ) @ #vk.51 )
+                qed
+              next
+                case c_sign
+                by solve( !KU( ~k.1 ) @ #vk.47 )
+              qed
+            next
+              case c_sign
+              by solve( !KU( ~k ) @ #vk.47 )
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma verifier_accepts_nonconformant_push_to_repoY [left]:
+  exists-trace
+  "∃ R P tid #i #j.
+    (Accept( R, P, <'push', 'repoY'>, tid ) @ #i) ∧
+    (Produced( 'tracker', tid, 'repoX' ) @ #j)"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ R P tid #i #j.
+  (Accept( R, P, <'push', 'repoY'>, tid ) @ #i) ∧
+  (Produced( 'tracker', tid, 'repoX' ) @ #j)"
+*/
+by simplify
+
+diffLemma Observational_equivalence:
+rule-equivalence
+  case Rule_Destrd_0_verify
+  backward-search
+    case LHS
+    step( simplify )
+    step( solve( !KD( sign(x, x.1) ) ▶₀ #i ) )
+      case Tracker_answers_with_provenance
+      step( solve( (#vl, 0) ~~> (#i, 0) ) )
+        case d_0_snd
+        step( solve( (#vr.1, 0) ~~> (#i, 0) ) )
+          case sign
+          step( solve( !Task( tid ) ▶₀ #vr ) )
+            case Human_dynamic_task
+            step( solve( !Ltk( 'tracker', ks ) ▶₁ #vr ) )
+              case Register
+              step( solve( !KU( ~tid ) @ #vk.6 ) )
+                case Human_dynamic_task_case_1
+                step( solve( !KU( pk(~k) ) @ #vk.4 ) )
+                  case Register
+                  step( solve( !KU( 'prov' ) @ #vk.5 ) )
+                    case pub
+                    step( solve( !KU( 'tracker' ) @ #vk.6 ) )
+                      case pub
+                      step( solve( !KU( 'repoY' ) @ #vk.7 ) )
+                        case pub
+                        by ATTACK // trace found
+                      qed
+                    qed
+                  qed
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+qed
+
+/* All wellformedness checks were successful. */
+
+/*
+Generated from:
+Tamarin version 1.12.0
+Maude version 3.5.1
+Git revision: 82780bbaf3328a45f624ddb41e51bf75425f851c (with uncommited changes), branch: master
+Compiled at: 2026-03-07 14:22:39.174278293 UTC
+*/
+
+end
+
+==============================================================================
+summary of summaries:
+
+analyzed: Separation.spthy
+
+  processing time: 554.68s
+  
+  RHS :  verifier_accepts_conformant_push_to_repoY (exists-trace): falsified - no trace found (1 steps)
+  LHS :  verifier_accepts_conformant_push_to_repoY (exists-trace): verified (15 steps)
+  RHS :  verifier_accepts_nonconformant_push_to_repoY (exists-trace): falsified - no trace found (17 steps)
+  LHS :  verifier_accepts_nonconformant_push_to_repoY (exists-trace): falsified - no trace found (1 steps)
+  DiffLemma:  Observational_equivalence : falsified - found trace (14 steps)
+
+==============================================================================

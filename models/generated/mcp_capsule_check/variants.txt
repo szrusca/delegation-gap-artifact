@@ -1,0 +1,7 @@
+spec
+spec_must
+noaud
+noaud_noscope
+opscope
+xchg
+xchg_dpop

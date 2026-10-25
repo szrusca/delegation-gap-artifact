@@ -1,0 +1,136 @@
+Biprocess 0 (that is, the initial process):
+{1}new skH: skey;
+{2}new skA1: skey;
+{3}new skA2: skey;
+{4}new skT: skey;
+{5}out(c, (pk(skH),pk(skA1),pk(skA2),pk(skT)));
+(
+    {6}!
+    {7}let skH_1: skey = skH in
+    {8}let skT_1: skey = skT in
+    {9}new tid: bitstring;
+    {10}let d1: bitstring = (root,H,A1,(push,any),tid) in
+    {11}let cap: bitstring = (capt,H,tid,(hole,push,tracker)) in
+    {12}out(c, (d1,sign(d1,skH_1)));
+    {13}out(c, (cap,sign(cap,skH_1)));
+    {14}out(agentview, (tid,choice[repoY,repoX]))
+) | (
+    {15}!
+    {16}let pkH: pkey = pk(skH) in
+    {17}let skA1_1: skey = skA1 in
+    {18}in(c, (d1_1: bitstring,s1: bitstring));
+    {19}if (checksign(s1,pkH) = d1_1) then
+    {20}let (=root,xh: bitstring,=A1,c1: bitstring,tid_1: bitstring) = d1_1 in
+    {21}in(c, (child: bitstring,c2: bitstring));
+    {22}let d2: bitstring = (del,A1,child,c2,h((d1_1,s1))) in
+    {23}out(c, (d2,sign(d2,skA1_1)))
+) | (
+    {24}!
+    {25}let pkH_1: pkey = pk(skH) in
+    {26}let pkA1: pkey = pk(skA1) in
+    {27}let skA2_1: skey = skA2 in
+    {28}in(c, (d1_2: bitstring,s1_1: bitstring,d2_1: bitstring,s2: bitstring));
+    {29}if (checksign(s1_1,pkH_1) = d1_2) then
+    {30}if (checksign(s2,pkA1) = d2_1) then
+    {31}let (=root,xh_1: bitstring,xa1: bitstring,c1_1: bitstring,tid_2: bitstring) = d1_2 in
+    {32}let (=del,=xa1,=A2,c2_1: bitstring,=h((d1_2,s1_1))) = d2_1 in
+    {33}in(agentview, (=tid_2,observed: bitstring));
+    {34}in(c, (r: bitstring,a: bitstring));
+    {35}out(c, (req,a,d1_2,s1_1,d2_1,s2,sign((req,a,r,h((d1_2,s1_1,d2_1,s2))),skA2_1)))
+) | (
+    {36}!
+    {37}let pkH_2: pkey = pk(skH) in
+    {38}let pkA1_1: pkey = pk(skA1) in
+    {39}let pkA2: pkey = pk(skA2) in
+    {40}let pkT: pkey = pk(skT) in
+    {41}in(c, (=req,a_1: bitstring,d1_3: bitstring,s1_2: bitstring,d2_2: bitstring,s2_1: bitstring,sr: bitstring));
+    {42}if (checksign(s1_2,pkH_2) = d1_3) then
+    {43}if (checksign(s2_1,pkA1_1) = d2_2) then
+    {44}if (checksign(sr,pkA2) = (req,a_1,R,h((d1_3,s1_2,d2_2,s2_1)))) then
+    {45}let (=root,=H,xa1_1: bitstring,(=push,=any),tid_3: bitstring) = d1_3 in
+    {46}let (=del,=xa1_1,=A2,c2_2: bitstring,=h((d1_3,s1_2))) = d2_2 in
+    {47}let (=push,v: bitstring) = a_1 in
+    {48}in(c, (cap_1: bitstring,sc: bitstring));
+    {49}if (checksign(sc,pkH_2) = cap_1) then
+    {50}let (=capt,=H,=tid_3,(=hole,=push,src: bitstring)) = cap_1 in
+    {51}event Accept(a_1,tid_3);
+    {52}out(c, (accepted,a_1,tid_3))
+)
+
+-- Observational equivalence in biprocess 1 (that is, biprocess 0, with let moved downwards):
+{1}new skH: skey;
+{2}new skA1: skey;
+{3}new skA2: skey;
+{4}new skT: skey;
+{5}out(c, (pk(skH),pk(skA1),pk(skA2),pk(skT)));
+(
+    {6}!
+    {9}new tid: bitstring;
+    {10}let d1: bitstring = (root,H,A1,(push,any),tid) in
+    {7}let skH_1: skey = skH in
+    {12}out(c, (d1,sign(d1,skH_1)));
+    {11}let cap: bitstring = (capt,H,tid,(hole,push,tracker)) in
+    {13}out(c, (cap,sign(cap,skH_1)));
+    {14}out(agentview, (tid,choice[repoY,repoX]))
+) | (
+    {15}!
+    {18}in(c, (d1_1: bitstring,s1: bitstring));
+    {16}let pkH: pkey = pk(skH) in
+    {19}if (checksign(s1,pkH) = d1_1) then
+    {20}let (=root,xh: bitstring,=A1,c1: bitstring,tid_1: bitstring) = d1_1 in
+    {21}in(c, (child: bitstring,c2: bitstring));
+    {22}let d2: bitstring = (del,A1,child,c2,h((d1_1,s1))) in
+    {17}let skA1_1: skey = skA1 in
+    {23}out(c, (d2,sign(d2,skA1_1)))
+) | (
+    {24}!
+    {28}in(c, (d1_2: bitstring,s1_1: bitstring,d2_1: bitstring,s2: bitstring));
+    {25}let pkH_1: pkey = pk(skH) in
+    {29}if (checksign(s1_1,pkH_1) = d1_2) then
+    {26}let pkA1: pkey = pk(skA1) in
+    {30}if (checksign(s2,pkA1) = d2_1) then
+    {31}let (=root,xh_1: bitstring,xa1: bitstring,c1_1: bitstring,tid_2: bitstring) = d1_2 in
+    {32}let (=del,=xa1,=A2,c2_1: bitstring,=h((d1_2,s1_1))) = d2_1 in
+    {33}in(agentview, (=tid_2,observed: bitstring));
+    {34}in(c, (r: bitstring,a: bitstring));
+    {27}let skA2_1: skey = skA2 in
+    {35}out(c, (req,a,d1_2,s1_1,d2_1,s2,sign((req,a,r,h((d1_2,s1_1,d2_1,s2))),skA2_1)))
+) | (
+    {36}!
+    {41}in(c, (=req,a_1: bitstring,d1_3: bitstring,s1_2: bitstring,d2_2: bitstring,s2_1: bitstring,sr: bitstring));
+    {37}let pkH_2: pkey = pk(skH) in
+    {42}if (checksign(s1_2,pkH_2) = d1_3) then
+    {38}let pkA1_1: pkey = pk(skA1) in
+    {43}if (checksign(s2_1,pkA1_1) = d2_2) then
+    {39}let pkA2: pkey = pk(skA2) in
+    {44}if (checksign(sr,pkA2) = (req,a_1,R,h((d1_3,s1_2,d2_2,s2_1)))) then
+    {45}let (=root,=H,xa1_1: bitstring,(=push,=any),tid_3: bitstring) = d1_3 in
+    {46}let (=del,=xa1_1,=A2,c2_2: bitstring,=h((d1_3,s1_2))) = d2_2 in
+    {47}let (=push,v: bitstring) = a_1 in
+    {48}in(c, (cap_1: bitstring,sc: bitstring));
+    {49}if (checksign(sc,pkH_2) = cap_1) then
+    {50}let (=capt,=H,=tid_3,(=hole,=push,src: bitstring)) = cap_1 in
+    {51}event Accept(a_1,tid_3);
+    {52}out(c, (accepted,a_1,tid_3))
+)
+
+Translating the process into Horn clauses...
+Termination warning: v_1 ≠ v_2 && attacker2(v_3,v_1) && attacker2(v_3,v_2) -> bad
+Selecting 0
+Termination warning: v_1 ≠ v_2 && attacker2(v_1,v_3) && attacker2(v_2,v_3) -> bad
+Selecting 0
+Completing...
+Termination warning: v_1 ≠ v_2 && attacker2(v_3,v_1) && attacker2(v_3,v_2) -> bad
+Selecting 0
+Termination warning: v_1 ≠ v_2 && attacker2(v_1,v_3) && attacker2(v_2,v_3) -> bad
+Selecting 0
+200 rules inserted. Base: 177 rules (45 with conclusion selected). Queue: 20 rules.
+RESULT Observational equivalence is true.
+
+--------------------------------------------------------------
+Verification summary:
+
+Observational equivalence is true.
+
+--------------------------------------------------------------
+

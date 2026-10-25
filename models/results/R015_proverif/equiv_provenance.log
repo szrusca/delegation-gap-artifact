@@ -1,0 +1,196 @@
+Biprocess 0 (that is, the initial process):
+{1}new skH: skey;
+{2}new skA1: skey;
+{3}new skA2: skey;
+{4}new skT: skey;
+{5}out(c, (pk(skH),pk(skA1),pk(skA2),pk(skT)));
+(
+    {6}!
+    {7}let skH_1: skey = skH in
+    {8}let skT_1: skey = skT in
+    {9}new tid: bitstring;
+    {10}let d1: bitstring = (root,H,A1,(push,any),tid) in
+    {11}let cap: bitstring = (capt,H,tid,(hole,push,tracker)) in
+    {12}out(c, (d1,sign(d1,skH_1)));
+    {13}out(c, (cap,sign(cap,skH_1)));
+    {14}let p: bitstring = (prov,tracker,tid,choice[repoY,repoX]) in
+    {15}out(c, (p,sign(p,skT_1)));
+    {16}out(agentview, (tid,choice[repoY,repoX]))
+) | (
+    {17}!
+    {18}let pkH: pkey = pk(skH) in
+    {19}let skA1_1: skey = skA1 in
+    {20}in(c, (d1_1: bitstring,s1: bitstring));
+    {21}if (checksign(s1,pkH) = d1_1) then
+    {22}let (=root,xh: bitstring,=A1,c1: bitstring,tid_1: bitstring) = d1_1 in
+    {23}in(c, (child: bitstring,c2: bitstring));
+    {24}let d2: bitstring = (del,A1,child,c2,h((d1_1,s1))) in
+    {25}out(c, (d2,sign(d2,skA1_1)))
+) | (
+    {26}!
+    {27}let pkH_1: pkey = pk(skH) in
+    {28}let pkA1: pkey = pk(skA1) in
+    {29}let skA2_1: skey = skA2 in
+    {30}in(c, (d1_2: bitstring,s1_1: bitstring,d2_1: bitstring,s2: bitstring));
+    {31}if (checksign(s1_1,pkH_1) = d1_2) then
+    {32}if (checksign(s2,pkA1) = d2_1) then
+    {33}let (=root,xh_1: bitstring,xa1: bitstring,c1_1: bitstring,tid_2: bitstring) = d1_2 in
+    {34}let (=del,=xa1,=A2,c2_1: bitstring,=h((d1_2,s1_1))) = d2_1 in
+    {35}in(agentview, (=tid_2,observed: bitstring));
+    {36}in(c, (r: bitstring,a: bitstring));
+    {37}out(c, (req,a,d1_2,s1_1,d2_1,s2,sign((req,a,r,h((d1_2,s1_1,d2_1,s2))),skA2_1)))
+) | (
+    {38}!
+    {39}let pkH_2: pkey = pk(skH) in
+    {40}let pkA1_1: pkey = pk(skA1) in
+    {41}let pkA2: pkey = pk(skA2) in
+    {42}let pkT: pkey = pk(skT) in
+    {43}in(c, (=req,a_1: bitstring,d1_3: bitstring,s1_2: bitstring,d2_2: bitstring,s2_1: bitstring,sr: bitstring));
+    {44}if (checksign(s1_2,pkH_2) = d1_3) then
+    {45}if (checksign(s2_1,pkA1_1) = d2_2) then
+    {46}if (checksign(sr,pkA2) = (req,a_1,R,h((d1_3,s1_2,d2_2,s2_1)))) then
+    {47}let (=root,=H,xa1_1: bitstring,(=push,=any),tid_3: bitstring) = d1_3 in
+    {48}let (=del,=xa1_1,=A2,c2_2: bitstring,=h((d1_3,s1_2))) = d2_2 in
+    {49}let (=push,v: bitstring) = a_1 in
+    {50}in(c, (cap_1: bitstring,sc: bitstring));
+    {51}if (checksign(sc,pkH_2) = cap_1) then
+    {52}let (=capt,=H,=tid_3,(=hole,=push,src: bitstring)) = cap_1 in
+    {53}in(c, (p_1: bitstring,sp: bitstring));
+    {54}if (checksign(sp,pkT) = p_1) then
+    {55}let (=prov,=src,=tid_3,=v) = p_1 in
+    {56}if (src = tracker) then
+    {57}event Accept(a_1,tid_3);
+    {58}out(c, (accepted,a_1,tid_3))
+)
+
+-- Observational equivalence in biprocess 1 (that is, biprocess 0, with let moved downwards):
+{1}new skH: skey;
+{2}new skA1: skey;
+{3}new skA2: skey;
+{4}new skT: skey;
+{5}out(c, (pk(skH),pk(skA1),pk(skA2),pk(skT)));
+(
+    {6}!
+    {9}new tid: bitstring;
+    {10}let d1: bitstring = (root,H,A1,(push,any),tid) in
+    {7}let skH_1: skey = skH in
+    {12}out(c, (d1,sign(d1,skH_1)));
+    {11}let cap: bitstring = (capt,H,tid,(hole,push,tracker)) in
+    {13}out(c, (cap,sign(cap,skH_1)));
+    {14}let p: bitstring = (prov,tracker,tid,choice[repoY,repoX]) in
+    {8}let skT_1: skey = skT in
+    {15}out(c, (p,sign(p,skT_1)));
+    {16}out(agentview, (tid,choice[repoY,repoX]))
+) | (
+    {17}!
+    {20}in(c, (d1_1: bitstring,s1: bitstring));
+    {18}let pkH: pkey = pk(skH) in
+    {21}if (checksign(s1,pkH) = d1_1) then
+    {22}let (=root,xh: bitstring,=A1,c1: bitstring,tid_1: bitstring) = d1_1 in
+    {23}in(c, (child: bitstring,c2: bitstring));
+    {24}let d2: bitstring = (del,A1,child,c2,h((d1_1,s1))) in
+    {19}let skA1_1: skey = skA1 in
+    {25}out(c, (d2,sign(d2,skA1_1)))
+) | (
+    {26}!
+    {30}in(c, (d1_2: bitstring,s1_1: bitstring,d2_1: bitstring,s2: bitstring));
+    {27}let pkH_1: pkey = pk(skH) in
+    {31}if (checksign(s1_1,pkH_1) = d1_2) then
+    {28}let pkA1: pkey = pk(skA1) in
+    {32}if (checksign(s2,pkA1) = d2_1) then
+    {33}let (=root,xh_1: bitstring,xa1: bitstring,c1_1: bitstring,tid_2: bitstring) = d1_2 in
+    {34}let (=del,=xa1,=A2,c2_1: bitstring,=h((d1_2,s1_1))) = d2_1 in
+    {35}in(agentview, (=tid_2,observed: bitstring));
+    {36}in(c, (r: bitstring,a: bitstring));
+    {29}let skA2_1: skey = skA2 in
+    {37}out(c, (req,a,d1_2,s1_1,d2_1,s2,sign((req,a,r,h((d1_2,s1_1,d2_1,s2))),skA2_1)))
+) | (
+    {38}!
+    {43}in(c, (=req,a_1: bitstring,d1_3: bitstring,s1_2: bitstring,d2_2: bitstring,s2_1: bitstring,sr: bitstring));
+    {39}let pkH_2: pkey = pk(skH) in
+    {44}if (checksign(s1_2,pkH_2) = d1_3) then
+    {40}let pkA1_1: pkey = pk(skA1) in
+    {45}if (checksign(s2_1,pkA1_1) = d2_2) then
+    {41}let pkA2: pkey = pk(skA2) in
+    {46}if (checksign(sr,pkA2) = (req,a_1,R,h((d1_3,s1_2,d2_2,s2_1)))) then
+    {47}let (=root,=H,xa1_1: bitstring,(=push,=any),tid_3: bitstring) = d1_3 in
+    {48}let (=del,=xa1_1,=A2,c2_2: bitstring,=h((d1_3,s1_2))) = d2_2 in
+    {49}let (=push,v: bitstring) = a_1 in
+    {50}in(c, (cap_1: bitstring,sc: bitstring));
+    {51}if (checksign(sc,pkH_2) = cap_1) then
+    {52}let (=capt,=H,=tid_3,(=hole,=push,src: bitstring)) = cap_1 in
+    {53}in(c, (p_1: bitstring,sp: bitstring));
+    {42}let pkT: pkey = pk(skT) in
+    {54}if (checksign(sp,pkT) = p_1) then
+    {55}let (=prov,=src,=tid_3,=v) = p_1 in
+    {56}if (src = tracker) then
+    {57}event Accept(a_1,tid_3);
+    {58}out(c, (accepted,a_1,tid_3))
+)
+
+Translating the process into Horn clauses...
+Termination warning: v_1 ≠ v_2 && attacker2(v_3,v_1) && attacker2(v_3,v_2) -> bad
+Selecting 0
+Termination warning: v_1 ≠ v_2 && attacker2(v_1,v_3) && attacker2(v_2,v_3) -> bad
+Selecting 0
+Completing...
+Termination warning: v_1 ≠ v_2 && attacker2(v_3,v_1) && attacker2(v_3,v_2) -> bad
+Selecting 0
+Termination warning: v_1 ≠ v_2 && attacker2(v_1,v_3) && attacker2(v_2,v_3) -> bad
+Selecting 0
+goal reachable: bad
+
+Derivation:
+Abbreviations:
+tid_4 = tid[!1 = @sid]
+
+1. The attacker initially knows repoX[] (resp. repoX[]).
+attacker2(repoX[],repoX[]).
+
+2. The message ((prov,tracker,tid_4,repoY[]),sign((prov,tracker,tid_4,repoY[]),skT[])) (resp. ((prov,tracker,tid_4,repoX[]),sign((prov,tracker,tid_4,repoX[]),skT[]))) may be sent to the attacker at output {15}.
+attacker2(((prov,tracker,tid_4,repoY[]),sign((prov,tracker,tid_4,repoY[]),skT[])),((prov,tracker,tid_4,repoX[]),sign((prov,tracker,tid_4,repoX[]),skT[]))).
+
+3. By 2, the attacker may know ((prov,tracker,tid_4,repoY[]),sign((prov,tracker,tid_4,repoY[]),skT[])) (resp. ((prov,tracker,tid_4,repoX[]),sign((prov,tracker,tid_4,repoX[]),skT[]))).
+Using the function 1-proj-2-tuple the attacker may obtain (prov,tracker,tid_4,repoY[]) (resp. (prov,tracker,tid_4,repoX[])).
+attacker2((prov,tracker,tid_4,repoY[]),(prov,tracker,tid_4,repoX[])).
+
+4. By 3, the attacker may know (prov,tracker,tid_4,repoY[]) (resp. (prov,tracker,tid_4,repoX[])).
+Using the function 4-proj-4-tuple the attacker may obtain repoY[] (resp. repoX[]).
+attacker2(repoY[],repoX[]).
+
+5. By 4, the attacker may know repoY[] (resp. repoX[]).
+By 1, the attacker may know repoX[] (resp. repoX[]).
+We have repoY[] ≠ repoX[].
+The attacker tests equality between the two terms he knows, which may allow it to distinguish cases.
+bad.
+
+
+A more detailed output of the traces is available with
+  set traceDisplay = long.
+
+new skH: skey creating skH_2 at {1}
+
+new skA1: skey creating skA1_2 at {2}
+
+new skA2: skey creating skA2_2 at {3}
+
+new skT: skey creating skT_2 at {4}
+
+out(c, (~M,~M_1,~M_2,~M_3)) with ~M = pk(skH_2), ~M_1 = pk(skA1_2), ~M_2 = pk(skA2_2), ~M_3 = pk(skT_2) at {5}
+
+new tid: bitstring creating tid_5 at {9} in copy a_2
+
+out(c, ((root,~M_4,~M_5,(push,any),~M_6),~M_7)) with ~M_4 = H, ~M_5 = A1, ~M_6 = tid_5, ~M_7 = sign((root,H,A1,(push,any),tid_5),skH_2) at {12} in copy a_2
+
+out(c, ((capt,~M_8,~M_9,(hole,push,tracker)),~M_10)) with ~M_8 = H, ~M_9 = tid_5, ~M_10 = sign((capt,H,tid_5,(hole,push,tracker)),skH_2) at {13} in copy a_2
+
+out(c, ((prov,tracker,~M_11,~M_12),~M_13)) with ((prov,tracker,~M_11,~M_12),~M_13) = choice[((prov,tracker,tid_5,repoY),sign((prov,tracker,tid_5,repoY),skT_2)),((prov,tracker,tid_5,repoX),sign((prov,tracker,tid_5,repoX),skT_2))] at {15} in copy a_2
+
+The attacker tests whether
+~M_12 = choice[repoY,repoX]
+is equal to
+repoX.
+The result in the left-hand side is different from the result in the right-hand side.
+A trace has been found.
+RESULT Observational equivalence cannot be proved.
+Looking for simplified processes ...

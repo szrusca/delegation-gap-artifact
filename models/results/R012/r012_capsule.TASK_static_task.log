@@ -1,0 +1,1253 @@
+maude tool: 'maude'
+ checking version: 3.5.1. OK.
+ checking installation: OK.
+[Theory WIMSE_r012_capsule] Theory loaded
+[Theory WIMSE_r012_capsule] Theory translated
+[Theory WIMSE_r012_capsule] Theory closed
+[Saturating Sources] Step 1 (Max 5)
+[Saturating Sources] Done
+theory WIMSE_r012_capsule
+
+begin
+
+// Function signature and definition of the equational theory E
+
+functions: fst/1, h/1, pair/2, pk/1, sign/2, snd/1, true/0, verify/3
+equations:
+    fst(<x.1, x.2>) = x.1,
+    snd(<x.1, x.2>) = x.2,
+    verify(sign(x.1, x.2), x.1, pk(x.2)) = true
+
+restriction Equality:
+  "∀ x y #i. (Eq( x, y ) @ #i) ⇒ (x = y)"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ x y #i. (Eq( x, y ) @ #i) ⇒ (x = y)"
+  */
+
+restriction CaveatPermits:
+  "∀ c a #i.
+    (Check( c, a ) @ #i) ⇒
+    ((c = a) ∨ (∃ op x. (a = <op, x>) ∧ (c = <op, 'any'>)))"
+
+  /*
+  expanded formula:
+  "∀ c a #i.
+    (Check( c, a ) @ #i) ⇒
+    ((c = a) ∨ (∃ op x. (a = <op, x>) ∧ (c = <op, 'any'>)))"
+  */
+
+restriction ConcreteOperand:
+  "∀ op #i. (Act( <op, 'any'> ) @ #i) ⇒ (⊥)"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ op #i. (Act( <op, 'any'> ) @ #i) ⇒ (⊥)"
+  */
+
+restriction UniqueKey:
+  "∀ X #i #j. ((Register( X ) @ #i) ∧ (Register( X ) @ #j)) ⇒ (#i = #j)"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ X #i #j. ((Register( X ) @ #i) ∧ (Register( X ) @ #j)) ⇒ (#i = #j)"
+  */
+
+restriction OneValuePerSourceAndTask:
+  "∀ s t v w #i #j.
+    ((Produced( s, t, v ) @ #i) ∧ (Produced( s, t, w ) @ #j)) ⇒ (#i = #j)"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ s t v w #i #j.
+    ((Produced( s, t, v ) @ #i) ∧ (Produced( s, t, w ) @ #j)) ⇒ (#i = #j)"
+  */
+
+restriction HumanTaskOperandIsConcrete:
+  "∀ H t op #i. (Intends( H, t, <'fixed', op, 'any'> ) @ #i) ⇒ (⊥)"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ H t op #i. (Intends( H, t, <'fixed', op, 'any'> ) @ #i) ⇒ (⊥)"
+  */
+
+rule (modulo E) Register:
+   [ Fr( ~k ) ]
+  --[ Register( $X ), Key( $X, pk(~k) ) ]->
+   [ !Ltk( $X, ~k ), !Pk( $X, pk(~k) ), Out( pk(~k) ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Human_links_vault_credential:
+   [ !Ltk( $H, kH ) ] --[ VaultLinked( $H, $R ) ]-> [ !Vault( $H, $R ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Human_starts_static_task:
+   [ Fr( ~tid ), !Ltk( $H, kH ) ]
+  --[ Intends( $H, ~tid, <'fixed', 'push', $repo> ), TaskStatic( ~tid ) ]->
+   [
+   Out( <~tid, $H> ), !TaskOf( ~tid, $H ),
+   !TaskFixed( ~tid, $H, <'push', $repo> ),
+   Out( <<'cap', $H, ~tid, 'fixed', 'push', $repo>, 
+         sign(<'cap', $H, ~tid, 'fixed', 'push', $repo>, kH)>
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Human_starts_dynamic_task:
+   [ Fr( ~tid ), !Ltk( $H, kH ) ]
+  --[ Intends( $H, ~tid, <'hole', 'push', $Src> ), TaskDynamic( ~tid ) ]->
+   [
+   Out( <~tid, $H> ), !TaskOf( ~tid, $H ), !TaskHole( ~tid, $H ),
+   !TaskOpen( ~tid, $Src ),
+   Out( <<'cap', $H, ~tid, 'hole', 'push', $Src>, 
+         sign(<'cap', $H, ~tid, 'hole', 'push', $Src>, kH)>
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Source_produces:
+   [ In( tid ), !Ltk( $Src, ks ) ]
+  --[ Produced( $Src, tid, $v ) ]->
+   [ Out( <<'prov', $Src, tid, $v>, sign(<'prov', $Src, tid, $v>, ks)> ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Human_sets_preauthorized_policy:
+   [ !Ltk( $H, kH ) ]
+  --[ PolicySet( $H, <'push', 'any'> ) ]->
+   [ !Policy( $H, <'push', 'any'> ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Human_preauthorizes_agent_did:
+   [ !Ltk( $H, kH ), !Pk( $D, pkD ) ]
+  --[ DidPreAuthorized( $H, pkD ) ]->
+   [ !PreAuth( $H, pkD ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Agent_requests_root_dt:
+   [ In( <H, c, tid> ), !Ltk( $D, kD ) ]
+  --[ RootRequested( pk(kD), H, c, tid ) ]->
+   [
+   Out( <<'rreq', H, pk(kD), c, tid>, sign(<'rreq', H, pk(kD), c, tid>, kD)>
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Agent_requests_subdelegation:
+   [
+   In( <<'dt', H, pk(k1), c1, tid, 'root'>, ds> ), In( <did2, c2> ),
+   !Ltk( $D, k1 )
+   ]
+  --[ SubDelegated( pk(k1), did2, tid ) ]->
+   [
+   Out( <'sreq', <'dt', H, pk(k1), c1, tid, 'root'>, ds, did2, c2, 
+         sign(<'sreq', h(<'dt', H, pk(k1), c1, tid, 'root'>), did2, c2>, k1)>
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Agent_exercises:
+   [
+   In( <<'dt', H, pk(kD), c, tid, par>, ds> ), In( <$R, a> ), !Ltk( $D, kD )
+   ]
+  --[ Request( pk(kD), a, tid ) ]->
+   [
+   Out( <'ex', <'dt', H, pk(kD), c, tid, par>, ds, $R, a, 
+         sign(<'dpop', a, $R, h(<'dt', H, pk(kD), c, tid, par>)>, kD)>
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) DS_issues_root_dt:
+   [
+   In( <<'rreq', H, did, c, tid>, sg> ), !TaskOf( tid, H ),
+   !Ltk( 'DS', kDS ), !Policy( H, pol ), !PreAuth( H, did )
+   ]
+  --[
+  Eq( verify(sg, <'rreq', H, did, c, tid>, did), true ), Check( pol, c ),
+  RootIssued( H, did, c, tid )
+  ]->
+   [
+   Out( <<'dt', H, did, c, tid, 'root'>, 
+         sign(<'dt', H, did, c, tid, 'root'>, kDS)>
+   )
+   ]
+
+  /*
+  rule (modulo AC) DS_issues_root_dt:
+     [
+     In( <<'rreq', H, did, c, tid>, sg> ), !TaskOf( tid, H ),
+     !Ltk( 'DS', kDS ), !Policy( H, pol ), !PreAuth( H, did )
+     ]
+    --[ Eq( z, true ), Check( pol, c ), RootIssued( H, did, c, tid ) ]->
+     [
+     Out( <<'dt', H, did, c, tid, 'root'>, 
+           sign(<'dt', H, did, c, tid, 'root'>, kDS)>
+     )
+     ]
+    variants (modulo AC)
+    1. H     = H.20
+       c     = c.21
+       did   = did.22
+       sg    = sg.25
+       tid   = tid.26
+       z     = verify(sg.25, <'rreq', H.20, did.22, c.21, tid.26>, did.22)
+    
+    2. H     = H.52
+       c     = c.53
+       did   = pk(x.102)
+       sg    = sign(<'rreq', H.52, pk(x.102), c.53, tid.58>, x.102)
+       tid   = tid.58
+       z     = true
+  */
+
+rule (modulo E) DS_issues_child_dt:
+   [
+   In( <'sreq', <'dt', H, did1, c1, tid, 'root'>, ds, did2, c2, ps> ),
+   !Ltk( 'DS', kDS ), !PreAuth( H, did2 )
+   ]
+  --[
+  Eq( verify(ds, <'dt', H, did1, c1, tid, 'root'>, pk(kDS)), true ),
+  Eq( verify(ps, <'sreq', h(<'dt', H, did1, c1, tid, 'root'>), did2, c2>,
+             did1),
+      true
+  ),
+  Check( c1, c2 ), ChildIssued( did1, did2, tid )
+  ]->
+   [
+   Out( <<'dt', H, did2, c2, tid, 'parent', did1>, 
+         sign(<'dt', H, did2, c2, tid, 'parent', did1>, kDS)>
+   )
+   ]
+
+  /*
+  rule (modulo AC) DS_issues_child_dt:
+     [
+     In( <'sreq', <'dt', H, did1, c1, tid, 'root'>, ds, did2, c2, ps> ),
+     !Ltk( 'DS', kDS ), !PreAuth( H, did2 )
+     ]
+    --[
+    Eq( z, true ), Eq( z.1, true ), Check( c1, c2 ),
+    ChildIssued( did1, did2, tid )
+    ]->
+     [
+     Out( <<'dt', H, did2, c2, tid, 'parent', did1>, 
+           sign(<'dt', H, did2, c2, tid, 'parent', did1>, kDS)>
+     )
+     ]
+    variants (modulo AC)
+    1. H     = H.26
+       c1    = c1.27
+       c2    = c2.28
+       did1  = did1.29
+       did2  = did2.30
+       ds    = ds.31
+       kDS   = kDS.32
+       ps    = ps.33
+       tid   = tid.34
+       z     = verify(ds.31, <'dt', H.26, did1.29, c1.27, tid.34, 'root'>,
+                      pk(kDS.32))
+       z.1   = verify(ps.33,
+                      <'sreq', h(<'dt', H.26, did1.29, c1.27, tid.34, 'root'>), did2.30, c2.28
+                      >,
+                      did1.29)
+    
+    2. H     = H.26
+       c1    = c1.27
+       c2    = c2.28
+       did1  = did1.29
+       did2  = did2.30
+       ds    = sign(<'dt', H.26, did1.29, c1.27, tid.34, 'root'>, kDS.32)
+       kDS   = kDS.32
+       ps    = ps.33
+       tid   = tid.34
+       z     = true
+       z.1   = verify(ps.33,
+                      <'sreq', h(<'dt', H.26, did1.29, c1.27, tid.34, 'root'>), did2.30, c2.28
+                      >,
+                      did1.29)
+    
+    3. H     = H.85
+       c1    = c1.86
+       c2    = c2.87
+       did1  = pk(x.168)
+       did2  = did2.89
+       ds    = ds.90
+       kDS   = kDS.91
+       ps    = sign(<'sreq', h(<'dt', H.85, pk(x.168), c1.86, tid.93, 'root'>), 
+                     did2.89, c2.87>,
+                    x.168)
+       tid   = tid.93
+       z     = verify(ds.90, <'dt', H.85, pk(x.168), c1.86, tid.93, 'root'>,
+                      pk(kDS.91))
+       z.1   = true
+    
+    4. H     = H.85
+       c1    = c1.86
+       c2    = c2.87
+       did1  = pk(x.168)
+       did2  = did2.89
+       ds    = sign(<'dt', H.85, pk(x.168), c1.86, tid.93, 'root'>, kDS.91)
+       kDS   = kDS.91
+       ps    = sign(<'sreq', h(<'dt', H.85, pk(x.168), c1.86, tid.93, 'root'>), 
+                     did2.89, c2.87>,
+                    x.168)
+       tid   = tid.93
+       z     = true
+       z.1   = true
+  */
+
+rule (modulo E) DS_exercises_capsule_fixed:
+   [
+   In( <'ex', <'dt', H, did, c, tid, par>, ds, $R, a, pr> ),
+   !Ltk( 'DS', kDS ), !Vault( H, $R ),
+   In( <<'cap', H, tid, 'fixed', a>, sc> ), !Pk( H, pkH )
+   ]
+  --[
+  Eq( verify(ds, <'dt', H, did, c, tid, par>, pk(kDS)), true ),
+  Eq( verify(pr, <'dpop', a, $R, h(<'dt', H, did, c, tid, par>)>, did),
+      true
+  ),
+  Check( c, a ), Act( a ),
+  Eq( verify(sc, <'cap', H, tid, 'fixed', a>, pkH), true ),
+  DSExec( H, did, a, tid )
+  ]->
+   [ UpCall( $R, H, did, a, tid ) ]
+
+  /*
+  rule (modulo AC) DS_exercises_capsule_fixed:
+     [
+     In( <'ex', <'dt', H, did, c, tid, par>, ds, $R, a, pr> ),
+     !Ltk( 'DS', kDS ), !Vault( H, $R ),
+     In( <<'cap', H, tid, 'fixed', a>, sc> ), !Pk( H, pkH )
+     ]
+    --[
+    Eq( z, true ), Eq( z.1, true ), Check( c, a ), Act( a ), Eq( z.2, true ),
+    DSExec( H, did, a, tid )
+    ]->
+     [ UpCall( $R, H, did, a, tid ) ]
+    variants (modulo AC)
+    1. $R    = $R.33
+       H     = H.34
+       a     = a.35
+       c     = c.36
+       did   = did.37
+       ds    = ds.38
+       kDS   = kDS.39
+       par   = par.40
+       pkH   = pkH.41
+       pr    = pr.42
+       sc    = sc.43
+       tid   = tid.44
+       z     = verify(ds.38, <'dt', H.34, did.37, c.36, tid.44, par.40>,
+                      pk(kDS.39))
+       z.1   = verify(pr.42,
+                      <'dpop', a.35, $R.33, h(<'dt', H.34, did.37, c.36, tid.44, par.40>)>,
+                      did.37)
+       z.2   = verify(sc.43, <'cap', H.34, tid.44, 'fixed', a.35>, pkH.41)
+    
+    2. $R    = $R.33
+       H     = H.34
+       a     = a.35
+       c     = c.36
+       did   = did.37
+       ds    = sign(<'dt', H.34, did.37, c.36, tid.44, par.40>, kDS.39)
+       kDS   = kDS.39
+       par   = par.40
+       pkH   = pkH.41
+       pr    = pr.42
+       sc    = sc.43
+       tid   = tid.44
+       z     = true
+       z.1   = verify(pr.42,
+                      <'dpop', a.35, $R.33, h(<'dt', H.34, did.37, c.36, tid.44, par.40>)>,
+                      did.37)
+       z.2   = verify(sc.43, <'cap', H.34, tid.44, 'fixed', a.35>, pkH.41)
+    
+    3. $R    = $R.106
+       H     = H.107
+       a     = a.108
+       c     = c.109
+       did   = pk(x.210)
+       ds    = ds.111
+       kDS   = kDS.112
+       par   = par.113
+       pkH   = pkH.114
+       pr    = sign(<'dpop', a.108, $R.106, 
+                     h(<'dt', H.107, pk(x.210), c.109, tid.117, par.113>)>,
+                    x.210)
+       sc    = sc.116
+       tid   = tid.117
+       z     = verify(ds.111, <'dt', H.107, pk(x.210), c.109, tid.117, par.113>,
+                      pk(kDS.112))
+       z.1   = true
+       z.2   = verify(sc.116, <'cap', H.107, tid.117, 'fixed', a.108>, pkH.114)
+    
+    4. $R    = $R.106
+       H     = H.107
+       a     = a.108
+       c     = c.109
+       did   = pk(x.210)
+       ds    = sign(<'dt', H.107, pk(x.210), c.109, tid.117, par.113>, kDS.112)
+       kDS   = kDS.112
+       par   = par.113
+       pkH   = pkH.114
+       pr    = sign(<'dpop', a.108, $R.106, 
+                     h(<'dt', H.107, pk(x.210), c.109, tid.117, par.113>)>,
+                    x.210)
+       sc    = sc.116
+       tid   = tid.117
+       z     = true
+       z.1   = true
+       z.2   = verify(sc.116, <'cap', H.107, tid.117, 'fixed', a.108>, pkH.114)
+    
+    5. $R    = $R.109
+       H     = H.110
+       a     = a.111
+       c     = c.112
+       did   = did.113
+       ds    = ds.114
+       kDS   = kDS.115
+       par   = par.116
+       pkH   = pk(x.216)
+       pr    = pr.118
+       sc    = sign(<'cap', H.110, tid.120, 'fixed', a.111>, x.216)
+       tid   = tid.120
+       z     = verify(ds.114, <'dt', H.110, did.113, c.112, tid.120, par.116>,
+                      pk(kDS.115))
+       z.1   = verify(pr.118,
+                      <'dpop', a.111, $R.109, 
+                       h(<'dt', H.110, did.113, c.112, tid.120, par.116>)>,
+                      did.113)
+       z.2   = true
+    
+    6. $R    = $R.109
+       H     = H.110
+       a     = a.111
+       c     = c.112
+       did   = did.113
+       ds    = sign(<'dt', H.110, did.113, c.112, tid.120, par.116>, kDS.115)
+       kDS   = kDS.115
+       par   = par.116
+       pkH   = pk(x.216)
+       pr    = pr.118
+       sc    = sign(<'cap', H.110, tid.120, 'fixed', a.111>, x.216)
+       tid   = tid.120
+       z     = true
+       z.1   = verify(pr.118,
+                      <'dpop', a.111, $R.109, 
+                       h(<'dt', H.110, did.113, c.112, tid.120, par.116>)>,
+                      did.113)
+       z.2   = true
+    
+    7. $R    = $R.110
+       H     = H.111
+       a     = a.112
+       c     = c.113
+       did   = pk(x.214)
+       ds    = ds.115
+       kDS   = kDS.116
+       par   = par.117
+       pkH   = pk(x.218)
+       pr    = sign(<'dpop', a.112, $R.110, 
+                     h(<'dt', H.111, pk(x.214), c.113, tid.121, par.117>)>,
+                    x.214)
+       sc    = sign(<'cap', H.111, tid.121, 'fixed', a.112>, x.218)
+       tid   = tid.121
+       z     = verify(ds.115, <'dt', H.111, pk(x.214), c.113, tid.121, par.117>,
+                      pk(kDS.116))
+       z.1   = true
+       z.2   = true
+    
+    8. $R    = $R.110
+       H     = H.111
+       a     = a.112
+       c     = c.113
+       did   = pk(x.214)
+       ds    = sign(<'dt', H.111, pk(x.214), c.113, tid.121, par.117>, kDS.116)
+       kDS   = kDS.116
+       par   = par.117
+       pkH   = pk(x.218)
+       pr    = sign(<'dpop', a.112, $R.110, 
+                     h(<'dt', H.111, pk(x.214), c.113, tid.121, par.117>)>,
+                    x.214)
+       sc    = sign(<'cap', H.111, tid.121, 'fixed', a.112>, x.218)
+       tid   = tid.121
+       z     = true
+       z.1   = true
+       z.2   = true
+  */
+
+rule (modulo E) DS_exercises_capsule_hole_unchecked:
+   [
+   In( <'ex', <'dt', H, did, c, tid, par>, ds, $R, <op, v>, pr> ),
+   !Ltk( 'DS', kDS ), !Vault( H, $R ),
+   In( <<'cap', H, tid, 'hole', op, S>, sc> ), !Pk( H, pkH )
+   ]
+  --[
+  Eq( verify(ds, <'dt', H, did, c, tid, par>, pk(kDS)), true ),
+  Eq( verify(pr, <'dpop', <op, v>, $R, h(<'dt', H, did, c, tid, par>)>,
+             did),
+      true
+  ),
+  Check( c, <op, v> ), Act( <op, v> ),
+  Eq( verify(sc, <'cap', H, tid, 'hole', op, S>, pkH), true ),
+  DSExec( H, did, <op, v>, tid )
+  ]->
+   [ UpCall( $R, H, did, <op, v>, tid ) ]
+
+  /*
+  rule (modulo AC) DS_exercises_capsule_hole_unchecked:
+     [
+     In( <'ex', <'dt', H, did, c, tid, par>, ds, $R, <op, v>, pr> ),
+     !Ltk( 'DS', kDS ), !Vault( H, $R ),
+     In( <<'cap', H, tid, 'hole', op, S>, sc> ), !Pk( H, pkH )
+     ]
+    --[
+    Eq( z, true ), Eq( z.1, true ), Check( c, <op, v> ), Act( <op, v> ),
+    Eq( z.2, true ), DSExec( H, did, <op, v>, tid )
+    ]->
+     [ UpCall( $R, H, did, <op, v>, tid ) ]
+    variants (modulo AC)
+    1. $R    = $R.37
+       H     = H.38
+       S     = S.39
+       c     = c.40
+       did   = did.41
+       ds    = ds.42
+       kDS   = kDS.43
+       op    = op.44
+       par   = par.45
+       pkH   = pkH.46
+       pr    = pr.47
+       sc    = sc.48
+       tid   = tid.49
+       v     = v.50
+       z     = verify(ds.42, <'dt', H.38, did.41, c.40, tid.49, par.45>,
+                      pk(kDS.43))
+       z.1   = verify(pr.47,
+                      <'dpop', <op.44, v.50>, $R.37, 
+                       h(<'dt', H.38, did.41, c.40, tid.49, par.45>)>,
+                      did.41)
+       z.2   = verify(sc.48, <'cap', H.38, tid.49, 'hole', op.44, S.39>, pkH.46)
+    
+    2. $R    = $R.37
+       H     = H.38
+       S     = S.39
+       c     = c.40
+       did   = did.41
+       ds    = sign(<'dt', H.38, did.41, c.40, tid.49, par.45>, kDS.43)
+       kDS   = kDS.43
+       op    = op.44
+       par   = par.45
+       pkH   = pkH.46
+       pr    = pr.47
+       sc    = sc.48
+       tid   = tid.49
+       v     = v.50
+       z     = true
+       z.1   = verify(pr.47,
+                      <'dpop', <op.44, v.50>, $R.37, 
+                       h(<'dt', H.38, did.41, c.40, tid.49, par.45>)>,
+                      did.41)
+       z.2   = verify(sc.48, <'cap', H.38, tid.49, 'hole', op.44, S.39>, pkH.46)
+    
+    3. $R    = $R.116
+       H     = H.117
+       S     = S.118
+       c     = c.119
+       did   = pk(x.230)
+       ds    = ds.121
+       kDS   = kDS.122
+       op    = op.123
+       par   = par.124
+       pkH   = pkH.125
+       pr    = sign(<'dpop', <op.123, v.129>, $R.116, 
+                     h(<'dt', H.117, pk(x.230), c.119, tid.128, par.124>)>,
+                    x.230)
+       sc    = sc.127
+       tid   = tid.128
+       v     = v.129
+       z     = verify(ds.121, <'dt', H.117, pk(x.230), c.119, tid.128, par.124>,
+                      pk(kDS.122))
+       z.1   = true
+       z.2   = verify(sc.127, <'cap', H.117, tid.128, 'hole', op.123, S.118>,
+                      pkH.125)
+    
+    4. $R    = $R.116
+       H     = H.117
+       S     = S.118
+       c     = c.119
+       did   = pk(x.230)
+       ds    = sign(<'dt', H.117, pk(x.230), c.119, tid.128, par.124>, kDS.122)
+       kDS   = kDS.122
+       op    = op.123
+       par   = par.124
+       pkH   = pkH.125
+       pr    = sign(<'dpop', <op.123, v.129>, $R.116, 
+                     h(<'dt', H.117, pk(x.230), c.119, tid.128, par.124>)>,
+                    x.230)
+       sc    = sc.127
+       tid   = tid.128
+       v     = v.129
+       z     = true
+       z.1   = true
+       z.2   = verify(sc.127, <'cap', H.117, tid.128, 'hole', op.123, S.118>,
+                      pkH.125)
+    
+    5. $R    = $R.120
+       H     = H.121
+       S     = S.122
+       c     = c.123
+       did   = did.124
+       ds    = ds.125
+       kDS   = kDS.126
+       op    = op.127
+       par   = par.128
+       pkH   = pk(x.238)
+       pr    = pr.130
+       sc    = sign(<'cap', H.121, tid.132, 'hole', op.127, S.122>, x.238)
+       tid   = tid.132
+       v     = v.133
+       z     = verify(ds.125, <'dt', H.121, did.124, c.123, tid.132, par.128>,
+                      pk(kDS.126))
+       z.1   = verify(pr.130,
+                      <'dpop', <op.127, v.133>, $R.120, 
+                       h(<'dt', H.121, did.124, c.123, tid.132, par.128>)>,
+                      did.124)
+       z.2   = true
+    
+    6. $R    = $R.120
+       H     = H.121
+       S     = S.122
+       c     = c.123
+       did   = did.124
+       ds    = sign(<'dt', H.121, did.124, c.123, tid.132, par.128>, kDS.126)
+       kDS   = kDS.126
+       op    = op.127
+       par   = par.128
+       pkH   = pk(x.238)
+       pr    = pr.130
+       sc    = sign(<'cap', H.121, tid.132, 'hole', op.127, S.122>, x.238)
+       tid   = tid.132
+       v     = v.133
+       z     = true
+       z.1   = verify(pr.130,
+                      <'dpop', <op.127, v.133>, $R.120, 
+                       h(<'dt', H.121, did.124, c.123, tid.132, par.128>)>,
+                      did.124)
+       z.2   = true
+    
+    7. $R    = $R.121
+       H     = H.122
+       S     = S.123
+       c     = c.124
+       did   = pk(x.235)
+       ds    = ds.126
+       kDS   = kDS.127
+       op    = op.128
+       par   = par.129
+       pkH   = pk(x.240)
+       pr    = sign(<'dpop', <op.128, v.134>, $R.121, 
+                     h(<'dt', H.122, pk(x.235), c.124, tid.133, par.129>)>,
+                    x.235)
+       sc    = sign(<'cap', H.122, tid.133, 'hole', op.128, S.123>, x.240)
+       tid   = tid.133
+       v     = v.134
+       z     = verify(ds.126, <'dt', H.122, pk(x.235), c.124, tid.133, par.129>,
+                      pk(kDS.127))
+       z.1   = true
+       z.2   = true
+    
+    8. $R    = $R.121
+       H     = H.122
+       S     = S.123
+       c     = c.124
+       did   = pk(x.235)
+       ds    = sign(<'dt', H.122, pk(x.235), c.124, tid.133, par.129>, kDS.127)
+       kDS   = kDS.127
+       op    = op.128
+       par   = par.129
+       pkH   = pk(x.240)
+       pr    = sign(<'dpop', <op.128, v.134>, $R.121, 
+                     h(<'dt', H.122, pk(x.235), c.124, tid.133, par.129>)>,
+                    x.235)
+       sc    = sign(<'cap', H.122, tid.133, 'hole', op.128, S.123>, x.240)
+       tid   = tid.133
+       v     = v.134
+       z     = true
+       z.1   = true
+       z.2   = true
+  */
+
+rule (modulo E) Resource_accepts_vault_call:
+   [ UpCall( R, H, did, a, tid ) ]
+  --[ Accept( R, H, 'DS', a, tid ), Served( R, did, a, tid ) ]->
+   [ ]
+
+  /* has exactly the trivial AC variant */
+
+lemma executable_static_task_conformant_two_hops:
+  exists-trace
+  "∃ R H a tid D1 D2 d1 d2 #i #e #c #j #k #k1 #k2.
+    (((((((Accept( R, H, 'DS', a, tid ) @ #i) ∧
+          (DSExec( H, d2, a, tid ) @ #e)) ∧
+         (ChildIssued( d1, d2, tid ) @ #c)) ∧
+        (TaskStatic( tid ) @ #j)) ∧
+       (Intends( H, tid, <'fixed', a> ) @ #k)) ∧
+      (Key( D1, d1 ) @ #k1)) ∧
+     (Key( D2, d2 ) @ #k2)) ∧
+    (¬(D1 = D2))"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ R H a tid D1 D2 d1 d2 #i #e #c #j #k #k1 #k2.
+  (Accept( R, H, 'DS', a, tid ) @ #i) ∧
+  (DSExec( H, d2, a, tid ) @ #e) ∧
+  (ChildIssued( d1, d2, tid ) @ #c) ∧
+  (TaskStatic( tid ) @ #j) ∧
+  (Intends( H, tid, <'fixed', a> ) @ #k) ∧
+  (Key( D1, d1 ) @ #k1) ∧
+  (Key( D2, d2 ) @ #k2)
+ ∧
+  ¬(D1 = D2)"
+*/
+by sorry
+
+lemma executable_dynamic_task_conformant_two_hops:
+  exists-trace
+  "∃ R H op v S tid D1 D2 d1 d2 #i #e #c #k #l #k1 #k2.
+    (((((((Accept( R, H, 'DS', <op, v>, tid ) @ #i) ∧
+          (DSExec( H, d2, <op, v>, tid ) @ #e)) ∧
+         (ChildIssued( d1, d2, tid ) @ #c)) ∧
+        (Intends( H, tid, <'hole', op, S> ) @ #k)) ∧
+       (Produced( S, tid, v ) @ #l)) ∧
+      (Key( D1, d1 ) @ #k1)) ∧
+     (Key( D2, d2 ) @ #k2)) ∧
+    (¬(D1 = D2))"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ R H op v S tid D1 D2 d1 d2 #i #e #c #k #l #k1 #k2.
+  (Accept( R, H, 'DS', <op, v>, tid ) @ #i) ∧
+  (DSExec( H, d2, <op, v>, tid ) @ #e) ∧
+  (ChildIssued( d1, d2, tid ) @ #c) ∧
+  (Intends( H, tid, <'hole', op, S> ) @ #k) ∧
+  (Produced( S, tid, v ) @ #l) ∧
+  (Key( D1, d1 ) @ #k1) ∧
+  (Key( D2, d2 ) @ #k2)
+ ∧
+  ¬(D1 = D2)"
+*/
+by sorry
+
+lemma witness_splice_child_without_parent_request:
+  exists-trace
+  "∃ D1 d1 d2 tid #c #k.
+    ((ChildIssued( d1, d2, tid ) @ #c) ∧ (Key( D1, d1 ) @ #k)) ∧
+    (¬(∃ #j. SubDelegated( d1, d2, tid ) @ #j))"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ D1 d1 d2 tid #c #k.
+  (ChildIssued( d1, d2, tid ) @ #c) ∧ (Key( D1, d1 ) @ #k)
+ ∧
+  ∀ #j. (SubDelegated( d1, d2, tid ) @ #j) ⇒ ⊥"
+*/
+by sorry
+
+lemma witness_exercise_by_unregistered_did:
+  exists-trace
+  "∃ H did a tid #e.
+    (DSExec( H, did, a, tid ) @ #e) ∧ (¬(∃ D #k. Key( D, did ) @ #k))"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ H did a tid #e.
+  (DSExec( H, did, a, tid ) @ #e) ∧ ∀ D #k. (Key( D, did ) @ #k) ⇒ ⊥"
+*/
+by sorry
+
+lemma witness_identity_collapse_at_resource:
+  exists-trace
+  "∃ R H L a b t1 t2 d1 d2 #i #j.
+    ((((Accept( R, H, L, a, t1 ) @ #i) ∧ (Served( R, d1, a, t1 ) @ #i)) ∧
+      (Accept( R, H, L, b, t2 ) @ #j)) ∧
+     (Served( R, d2, b, t2 ) @ #j)) ∧
+    (¬(d1 = d2))"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ R H L a b t1 t2 d1 d2 #i #j.
+  (Accept( R, H, L, a, t1 ) @ #i) ∧
+  (Served( R, d1, a, t1 ) @ #i) ∧
+  (Accept( R, H, L, b, t2 ) @ #j) ∧
+  (Served( R, d2, b, t2 ) @ #j)
+ ∧
+  ¬(d1 = d2)"
+*/
+by sorry
+
+lemma CHAINAUTH_registered_parent_requested_subdelegation:
+  all-traces
+  "∀ D1 d1 d2 tid #c #k.
+    ((ChildIssued( d1, d2, tid ) @ #c) ∧ (Key( D1, d1 ) @ #k)) ⇒
+    (∃ #j. SubDelegated( d1, d2, tid ) @ #j)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ D1 d1 d2 tid #c #k.
+  (ChildIssued( d1, d2, tid ) @ #c) ∧ (Key( D1, d1 ) @ #k)
+ ∧
+  ∀ #j. (SubDelegated( d1, d2, tid ) @ #j) ⇒ ⊥"
+*/
+by sorry
+
+lemma NOESC_exercise_within_human_authorization:
+  all-traces
+  "∀ H did a tid #e.
+    (DSExec( H, did, a, tid ) @ #e) ⇒
+    ((∃ c #j.
+       (PolicySet( H, c ) @ #j) ∧
+       ((c = a) ∨ (∃ op x. (a = <op, x>) ∧ (c = <op, 'any'>)))) ∨
+     (∃ d c #j.
+       (CibaApproved( H, d, c, tid ) @ #j) ∧
+       ((c = a) ∨ (∃ op x. (a = <op, x>) ∧ (c = <op, 'any'>)))))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ H did a tid #e.
+  (DSExec( H, did, a, tid ) @ #e)
+ ∧
+  (∀ c #j.
+    (PolicySet( H, c ) @ #j)
+   ⇒
+    (¬(c = a)) ∧ (∀ op x. (a = <op, x>) ∧ (c = <op, 'any'>) ⇒ ⊥)) ∧
+  (∀ d c #j.
+    (CibaApproved( H, d, c, tid ) @ #j)
+   ⇒
+    (¬(c = a)) ∧ (∀ op x. (a = <op, x>) ∧ (c = <op, 'any'>) ⇒ ⊥))"
+*/
+by sorry
+
+lemma ATTR_DS_logged_did_decided_operation:
+  all-traces
+  "∀ H did a tid #e.
+    (DSExec( H, did, a, tid ) @ #e) ⇒
+    (∃ #j. (Request( did, a, tid ) @ #j) ∧ (#j < #e))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ H did a tid #e.
+  (DSExec( H, did, a, tid ) @ #e)
+ ∧
+  ∀ #j. (Request( did, a, tid ) @ #j) ⇒ ¬(#j < #e)"
+*/
+by sorry
+
+lemma ATTR_R_logged_principal_decided_request:
+  all-traces
+  "∀ R H L a tid #i.
+    (Accept( R, H, L, a, tid ) @ #i) ⇒
+    (∃ #j. (Request( L, a, tid ) @ #j) ∧ (#j < #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ R H L a tid #i.
+  (Accept( R, H, L, a, tid ) @ #i)
+ ∧
+  ∀ #j. (Request( L, a, tid ) @ #j) ⇒ ¬(#j < #i)"
+*/
+by sorry
+
+lemma TASK_static_task:
+  all-traces
+  "∀ R H L a tid #i #j.
+    ((Accept( R, H, L, a, tid ) @ #i) ∧ (TaskStatic( tid ) @ #j)) ⇒
+    (∃ #k. Intends( H, tid, <'fixed', a> ) @ #k)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ R H L a tid #i #j.
+  (Accept( R, H, L, a, tid ) @ #i) ∧ (TaskStatic( tid ) @ #j)
+ ∧
+  ∀ #k. (Intends( H, tid, <'fixed', a> ) @ #k) ⇒ ⊥"
+*/
+simplify
+solve( UpCall( R, H, did, a, ~tid ) ▶₀ #i )
+  case DS_exercises_capsule_fixed
+  solve( (c = a)  ∥ (∃ op x. (a = <op, x>) ∧ (c = <op, 'any'>)) )
+    case case_1
+    solve( !Ltk( $H.1, kH ) ▶₁ #j )
+      case Register
+      solve( !KU( sign(<'dt', $H, pk(x), a, ~tid, par>, ~k.1) ) @ #vk.22 )
+        case DS_issues_child_dt
+        solve( (c1 = a)  ∥ (∃ op x. (a = <op, x>) ∧ (c1 = <op, 'any'>)) )
+          case case_1
+          solve( !KU( sign(<'dpop', a, $R, 
+                            h(<'dt', $H, pk(~k), a, ~tid, 'parent', pk(x)>)>,
+                           ~k)
+                 ) @ #vk.32 )
+            case Agent_exercises
+            solve( !KU( sign(<'cap', $H, ~tid, 'fixed', a>, ~k.3) ) @ #vk.39 )
+              case Human_starts_static_task
+              by contradiction /* from formulas */
+            next
+              case c_sign
+              by solve( !KU( ~k.3 ) @ #vk.47 )
+            qed
+          next
+            case c_sign
+            by solve( !KU( ~k ) @ #vk.47 )
+          qed
+        next
+          case case_2
+          solve( !KU( sign(<'dpop', <op, x>, $R, 
+                            h(<'dt', $H, pk(~k), <op, x>, ~tid, 'parent', pk(x.1)>)>,
+                           ~k)
+                 ) @ #vk.32 )
+            case Agent_exercises
+            solve( !KU( sign(<'cap', $H, ~tid, 'fixed', op, x>, ~k.3) ) @ #vk.39 )
+              case Human_starts_static_task
+              by contradiction /* from formulas */
+            next
+              case c_sign
+              by solve( !KU( ~k.3 ) @ #vk.51 )
+            qed
+          next
+            case c_sign
+            by solve( !KU( ~k ) @ #vk.51 )
+          qed
+        qed
+      next
+        case DS_issues_root_dt
+        solve( (<'push', 'any'> = a)  ∥
+               (∃ op x. (a = <op, x>) ∧ (<'push', 'any'> = <op, 'any'>)) )
+          case case_1
+          by contradiction /* from formulas */
+        next
+          case case_2
+          solve( !KU( sign(<'dpop', <'push', x>, $R, 
+                            h(<'dt', $H, pk(~k), <'push', x>, ~tid, 'root'>)>,
+                           ~k)
+                 ) @ #vk.28 )
+            case Agent_exercises
+            solve( !KU( sign(<'cap', $H, ~tid, 'fixed', 'push', x>, ~k.1)
+                   ) @ #vk.34 )
+              case Human_starts_static_task
+              by contradiction /* from formulas */
+            next
+              case c_sign
+              by solve( !KU( ~k.1 ) @ #vk.40 )
+            qed
+          next
+            case c_sign
+            by solve( !KU( ~k ) @ #vk.40 )
+          qed
+        qed
+      next
+        case c_sign
+        by solve( !KU( ~k.1 ) @ #vk.28 )
+      qed
+    qed
+  next
+    case case_2
+    solve( !Ltk( $H.1, kH ) ▶₁ #j )
+      case Register
+      solve( !KU( sign(<'dt', $H, pk(x), <op, 'any'>, ~tid, par>, ~k.1)
+             ) @ #vk.19 )
+        case DS_issues_child_dt
+        solve( (c1 = <op, 'any'>)  ∥
+               (∃ op.1 x. (<op, 'any'> = <op.1, x>) ∧ (c1 = <op.1, 'any'>)) )
+          case case_1
+          solve( !KU( sign(<'dpop', <op, x>, $R, 
+                            h(<'dt', $H, pk(~k), <op, 'any'>, ~tid, 'parent', pk(x.1)>)>,
+                           ~k)
+                 ) @ #vk.33 )
+            case Agent_exercises
+            solve( !KU( sign(<'cap', $H, ~tid, 'fixed', op, x>, ~k.3) ) @ #vk.40 )
+              case Human_starts_static_task
+              by contradiction /* from formulas */
+            next
+              case c_sign
+              by solve( !KU( ~k.3 ) @ #vk.51 )
+            qed
+          next
+            case c_sign
+            by solve( !KU( ~k ) @ #vk.51 )
+          qed
+        next
+          case case_2
+          solve( !KU( sign(<'dpop', <op, x>, $R, 
+                            h(<'dt', $H, pk(~k), <op, 'any'>, ~tid, 'parent', pk(x.1)>)>,
+                           ~k)
+                 ) @ #vk.33 )
+            case Agent_exercises
+            solve( !KU( sign(<'cap', $H, ~tid, 'fixed', op, x>, ~k.3) ) @ #vk.40 )
+              case Human_starts_static_task
+              by contradiction /* from formulas */
+            next
+              case c_sign
+              by solve( !KU( ~k.3 ) @ #vk.51 )
+            qed
+          next
+            case c_sign
+            by solve( !KU( ~k ) @ #vk.51 )
+          qed
+        qed
+      next
+        case DS_issues_root_dt
+        solve( (<'push', 'any'> = <op, 'any'>)  ∥
+               (∃ op.1 x.
+                 (<op, 'any'> = <op.1, x>) ∧ (<'push', 'any'> = <op.1, 'any'>)) )
+          case case_1
+          solve( !KU( sign(<'dpop', <'push', x>, $R, 
+                            h(<'dt', $H, pk(~k), <'push', 'any'>, ~tid, 'root'>)>,
+                           ~k)
+                 ) @ #vk.29 )
+            case Agent_exercises
+            solve( !KU( sign(<'cap', $H, ~tid, 'fixed', 'push', x>, ~k.1)
+                   ) @ #vk.35 )
+              case Human_starts_static_task
+              by contradiction /* from formulas */
+            next
+              case c_sign
+              by solve( !KU( ~k.1 ) @ #vk.42 )
+            qed
+          next
+            case c_sign
+            by solve( !KU( ~k ) @ #vk.42 )
+          qed
+        next
+          case case_2
+          solve( !KU( sign(<'dpop', <'push', x>, $R, 
+                            h(<'dt', $H, pk(~k), <'push', 'any'>, ~tid, 'root'>)>,
+                           ~k)
+                 ) @ #vk.29 )
+            case Agent_exercises
+            solve( !KU( sign(<'cap', $H, ~tid, 'fixed', 'push', x>, ~k.1)
+                   ) @ #vk.35 )
+              case Human_starts_static_task
+              by contradiction /* from formulas */
+            next
+              case c_sign
+              by solve( !KU( ~k.1 ) @ #vk.42 )
+            qed
+          next
+            case c_sign
+            by solve( !KU( ~k ) @ #vk.42 )
+          qed
+        qed
+      next
+        case c_sign
+        by solve( !KU( ~k.1 ) @ #vk.32 )
+      qed
+    qed
+  qed
+next
+  case DS_exercises_capsule_hole_unchecked
+  solve( (c = <op, v>)  ∥
+         (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c = <op.1, 'any'>)) )
+    case case_1
+    solve( !Ltk( $H.1, kH ) ▶₁ #j )
+      case Register
+      solve( !KU( sign(<'dt', $H, pk(x), <op, v>, ~tid, par>, ~k.1)
+             ) @ #vk.21 )
+        case DS_issues_child_dt
+        solve( (c1 = <op, v>)  ∥
+               (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c1 = <op.1, 'any'>)) )
+          case case_1
+          solve( !KU( sign(<'dpop', <op, v>, $R, 
+                            h(<'dt', $H, pk(~k), <op, v>, ~tid, 'parent', pk(x)>)>,
+                           ~k)
+                 ) @ #vk.35 )
+            case Agent_exercises
+            solve( !KU( sign(<'cap', $H, ~tid, 'hole', op, S>, ~k.3) ) @ #vk.43 )
+              case c_sign
+              by solve( !KU( ~k.3 ) @ #vk.51 )
+            qed
+          next
+            case c_sign
+            by solve( !KU( ~k ) @ #vk.51 )
+          qed
+        next
+          case case_2
+          solve( !KU( sign(<'dpop', <op, v>, $R, 
+                            h(<'dt', $H, pk(~k), <op, v>, ~tid, 'parent', pk(x)>)>,
+                           ~k)
+                 ) @ #vk.36 )
+            case Agent_exercises
+            solve( !KU( sign(<'cap', $H, ~tid, 'hole', op, S>, ~k.3) ) @ #vk.44 )
+              case c_sign
+              by solve( !KU( ~k.3 ) @ #vk.53 )
+            qed
+          next
+            case c_sign
+            by solve( !KU( ~k ) @ #vk.53 )
+          qed
+        qed
+      next
+        case DS_issues_root_dt
+        solve( (<'push', 'any'> = <op, v>)  ∥
+               (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (<'push', 'any'> = <op.1, 'any'>)) )
+          case case_1
+          by contradiction /* from formulas */
+        next
+          case case_2
+          solve( !KU( sign(<'dpop', <'push', v>, $R, 
+                            h(<'dt', $H, pk(~k), <'push', v>, ~tid, 'root'>)>,
+                           ~k)
+                 ) @ #vk.31 )
+            case Agent_exercises
+            solve( !KU( sign(<'cap', $H, ~tid, 'hole', 'push', S>, ~k.1) ) @ #vk.38 )
+              case c_sign
+              by solve( !KU( ~k.1 ) @ #vk.42 )
+            qed
+          next
+            case c_sign
+            by solve( !KU( ~k ) @ #vk.42 )
+          qed
+        qed
+      next
+        case c_sign
+        by solve( !KU( ~k.1 ) @ #vk.32 )
+      qed
+    qed
+  next
+    case case_2
+    solve( !Ltk( $H.1, kH ) ▶₁ #j )
+      case Register
+      solve( !KU( sign(<'dt', $H, pk(x), <op, 'any'>, ~tid, par>, ~k.1)
+             ) @ #vk.19 )
+        case DS_issues_child_dt
+        solve( (c1 = <op, 'any'>)  ∥
+               (∃ op.1 x. (<op, 'any'> = <op.1, x>) ∧ (c1 = <op.1, 'any'>)) )
+          case case_1
+          solve( !KU( sign(<'dpop', <op, v>, $R, 
+                            h(<'dt', $H, pk(~k), <op, 'any'>, ~tid, 'parent', pk(x)>)>,
+                           ~k)
+                 ) @ #vk.36 )
+            case Agent_exercises
+            solve( !KU( sign(<'cap', $H, ~tid, 'hole', op, S>, ~k.3) ) @ #vk.44 )
+              case c_sign
+              by solve( !KU( ~k.3 ) @ #vk.53 )
+            qed
+          next
+            case c_sign
+            by solve( !KU( ~k ) @ #vk.53 )
+          qed
+        next
+          case case_2
+          solve( !KU( sign(<'dpop', <op, v>, $R, 
+                            h(<'dt', $H, pk(~k), <op, 'any'>, ~tid, 'parent', pk(x)>)>,
+                           ~k)
+                 ) @ #vk.36 )
+            case Agent_exercises
+            solve( !KU( sign(<'cap', $H, ~tid, 'hole', op, S>, ~k.3) ) @ #vk.44 )
+              case c_sign
+              by solve( !KU( ~k.3 ) @ #vk.53 )
+            qed
+          next
+            case c_sign
+            by solve( !KU( ~k ) @ #vk.53 )
+          qed
+        qed
+      next
+        case DS_issues_root_dt
+        solve( (<'push', 'any'> = <op, 'any'>)  ∥
+               (∃ op.1 x.
+                 (<op, 'any'> = <op.1, x>) ∧ (<'push', 'any'> = <op.1, 'any'>)) )
+          case case_1
+          solve( !KU( sign(<'dpop', <'push', v>, $R, 
+                            h(<'dt', $H, pk(~k), <'push', 'any'>, ~tid, 'root'>)>,
+                           ~k)
+                 ) @ #vk.32 )
+            case Agent_exercises
+            solve( !KU( sign(<'cap', $H, ~tid, 'hole', 'push', S>, ~k.1) ) @ #vk.39 )
+              case c_sign
+              by solve( !KU( ~k.1 ) @ #vk.44 )
+            qed
+          next
+            case c_sign
+            by solve( !KU( ~k ) @ #vk.44 )
+          qed
+        next
+          case case_2
+          solve( !KU( sign(<'dpop', <'push', v>, $R, 
+                            h(<'dt', $H, pk(~k), <'push', 'any'>, ~tid, 'root'>)>,
+                           ~k)
+                 ) @ #vk.32 )
+            case Agent_exercises
+            solve( !KU( sign(<'cap', $H, ~tid, 'hole', 'push', S>, ~k.1) ) @ #vk.39 )
+              case c_sign
+              by solve( !KU( ~k.1 ) @ #vk.44 )
+            qed
+          next
+            case c_sign
+            by solve( !KU( ~k ) @ #vk.44 )
+          qed
+        qed
+      next
+        case c_sign
+        by solve( !KU( ~k.1 ) @ #vk.34 )
+      qed
+    qed
+  qed
+qed
+
+lemma TASK_dynamic_task:
+  all-traces
+  "∀ R H L op v tid #i #j.
+    ((Accept( R, H, L, <op, v>, tid ) @ #i) ∧ (TaskDynamic( tid ) @ #j)) ⇒
+    (∃ S #k #l.
+      (Intends( H, tid, <'hole', op, S> ) @ #k) ∧
+      (Produced( S, tid, v ) @ #l))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ R H L op v tid #i #j.
+  (Accept( R, H, L, <op, v>, tid ) @ #i) ∧ (TaskDynamic( tid ) @ #j)
+ ∧
+  ∀ S #k #l.
+   (Intends( H, tid, <'hole', op, S> ) @ #k) ∧ (Produced( S, tid, v ) @ #l)
+  ⇒
+   ⊥"
+*/
+by sorry
+
+/* All wellformedness checks were successful. */
+
+/*
+Generated from:
+Tamarin version 1.12.0
+Maude version 3.5.1
+Git revision: 82780bbaf3328a45f624ddb41e51bf75425f851c (with uncommited changes), branch: master
+Compiled at: 2026-03-07 14:22:39.174278293 UTC
+*/
+
+end
+
+==============================================================================
+summary of summaries:
+
+analyzed: generated/wimse_capsule/WIMSE_r012_capsule.spthy
+
+  processing time: 7.64s
+  
+  executable_static_task_conformant_two_hops (exists-trace): analysis incomplete (1 steps)
+  executable_dynamic_task_conformant_two_hops (exists-trace): analysis incomplete (1 steps)
+  witness_splice_child_without_parent_request (exists-trace): analysis incomplete (1 steps)
+  witness_exercise_by_unregistered_did (exists-trace): analysis incomplete (1 steps)
+  witness_identity_collapse_at_resource (exists-trace): analysis incomplete (1 steps)
+  CHAINAUTH_registered_parent_requested_subdelegation (all-traces): analysis incomplete (1 steps)
+  NOESC_exercise_within_human_authorization (all-traces): analysis incomplete (1 steps)
+  ATTR_DS_logged_did_decided_operation (all-traces): analysis incomplete (1 steps)
+  ATTR_R_logged_principal_decided_request (all-traces): analysis incomplete (1 steps)
+  TASK_static_task (all-traces): verified (89 steps)
+  TASK_dynamic_task (all-traces): analysis incomplete (1 steps)
+
+==============================================================================

@@ -1,0 +1,5 @@
+kc_spec_min
+kc_subpop
+kc_didpreauth
+kc_subpop_didpreauth
+kc_exact_consent

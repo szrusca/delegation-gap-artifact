@@ -1,0 +1,1680 @@
+maude tool: 'maude'
+ checking version: 3.5.1. OK.
+ checking installation: OK.
+[Theory AbsChain] Theory loaded
+[Theory AbsChain] Theory translated
+[Theory AbsChain] Theory closed
+[Saturating Sources] Step 1 (Max 5)
+[Saturating Sources] Done
+theory AbsChain
+
+begin
+
+// Function signature and definition of the equational theory E
+
+functions: fst/1, h/1, pair/2, pk/1, sign/2, snd/1, true/0, verify/3
+equations:
+    fst(<x.1, x.2>) = x.1,
+    snd(<x.1, x.2>) = x.2,
+    verify(sign(x.1, x.2), x.1, pk(x.2)) = true
+
+restriction Equality:
+  "∀ x y #i. (Eq( x, y ) @ #i) ⇒ (x = y)"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ x y #i. (Eq( x, y ) @ #i) ⇒ (x = y)"
+  */
+
+restriction CaveatPermits:
+  "∀ c a #i.
+    (Check( c, a ) @ #i) ⇒
+    ((c = a) ∨ (∃ op x. (a = <op, x>) ∧ (c = <op, 'any'>)))"
+
+  /*
+  expanded formula:
+  "∀ c a #i.
+    (Check( c, a ) @ #i) ⇒
+    ((c = a) ∨ (∃ op x. (a = <op, x>) ∧ (c = <op, 'any'>)))"
+  */
+
+restriction ConcreteOperand:
+  "∀ op #i. (Act( <op, 'any'> ) @ #i) ⇒ (⊥)"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ op #i. (Act( <op, 'any'> ) @ #i) ⇒ (⊥)"
+  */
+
+restriction UniqueKey:
+  "∀ X #i #j. ((Register( X ) @ #i) ∧ (Register( X ) @ #j)) ⇒ (#i = #j)"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ X #i #j. ((Register( X ) @ #i) ∧ (Register( X ) @ #j)) ⇒ (#i = #j)"
+  */
+
+restriction OneValuePerSourceAndTask:
+  "∀ s t v w #i #j.
+    ((Produced( s, t, v ) @ #i) ∧ (Produced( s, t, w ) @ #j)) ⇒ (#i = #j)"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ s t v w #i #j.
+    ((Produced( s, t, v ) @ #i) ∧ (Produced( s, t, w ) @ #j)) ⇒ (#i = #j)"
+  */
+
+rule (modulo E) Register:
+   [ Fr( ~k ) ]
+  --[ Register( $X ) ]->
+   [ !Ltk( $X, ~k ), !Pk( $X, pk(~k) ), Out( pk(~k) ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Human_static_task:
+   [ Fr( ~tid ), !Ltk( $H, kH ) ]
+  --[
+  Intends( $H, ~tid, <'fixed', 'push', $repo> ),
+  RootDelegated( $H, $A1, <'push', 'any'>, ~tid ), TaskStatic( ~tid )
+  ]->
+   [
+   Out( <<'root', $H, $A1, <'push', 'any'>, ~tid>, 
+         sign(<'root', $H, $A1, <'push', 'any'>, ~tid>, kH)>
+   ),
+   Out( <<'cap', $H, ~tid, 'fixed', 'push', $repo>, 
+         sign(<'cap', $H, ~tid, 'fixed', 'push', $repo>, kH)>
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Human_dynamic_task:
+   [ Fr( ~tid ), !Ltk( $H, kH ) ]
+  --[
+  Intends( $H, ~tid, <'hole', 'push', $Src> ),
+  RootDelegated( $H, $A1, <'push', 'any'>, ~tid ), TaskDynamic( ~tid )
+  ]->
+   [
+   Out( <<'root', $H, $A1, <'push', 'any'>, ~tid>, 
+         sign(<'root', $H, $A1, <'push', 'any'>, ~tid>, kH)>
+   ),
+   Out( <<'cap', $H, ~tid, 'hole', 'push', $Src>, 
+         sign(<'cap', $H, ~tid, 'hole', 'push', $Src>, kH)>
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Source_produces:
+   [ In( tid ), !Ltk( $Src, ks ) ]
+  --[ Produced( $Src, tid, $v ) ]->
+   [ Out( <<'prov', $Src, tid, $v>, sign(<'prov', $Src, tid, $v>, ks)> ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Agent1_honest_delegation:
+   [
+   In( <<'root', H, $A1, c1, tid>, s1> ), !Pk( H, pkH ), !Ltk( $A1, k1 ),
+   !Pk( $A2, pkA2 )
+   ]
+  --[
+  Eq( verify(s1, <'root', H, $A1, c1, tid>, pkH), true ),
+  Delegated( $A1, $A2, c1, tid )
+  ]->
+   [
+   Out( <<'del', $A1, $A2, c1, h(<<'root', H, $A1, c1, tid>, s1>)>, 
+         sign(<'del', $A1, $A2, c1, h(<<'root', H, $A1, c1, tid>, s1>)>, k1)>
+   )
+   ]
+
+  /*
+  rule (modulo AC) Agent1_honest_delegation:
+     [
+     In( <<'root', H, $A1, c1, tid>, s1> ), !Pk( H, pkH ), !Ltk( $A1, k1 ),
+     !Pk( $A2, pkA2 )
+     ]
+    --[ Eq( z, true ), Delegated( $A1, $A2, c1, tid ) ]->
+     [
+     Out( <<'del', $A1, $A2, c1, h(<<'root', H, $A1, c1, tid>, s1>)>, 
+           sign(<'del', $A1, $A2, c1, h(<<'root', H, $A1, c1, tid>, s1>)>, k1)>
+     )
+     ]
+    variants (modulo AC)
+    1. $A1   = $A1.22
+       H     = H.24
+       c1    = c1.25
+       pkH   = pkH.28
+       s1    = s1.29
+       tid   = tid.30
+       z     = verify(s1.29, <'root', H.24, $A1.22, c1.25, tid.30>, pkH.28)
+    
+    2. $A1   = $A1.32
+       H     = H.34
+       c1    = c1.35
+       pkH   = pk(x.62)
+       s1    = sign(<'root', H.34, $A1.32, c1.35, tid.40>, x.62)
+       tid   = tid.40
+       z     = true
+  */
+
+rule (modulo E) Agent2_honest_request_fixed:
+   [
+   In( <<'root', H, A1, c1, tid>, s1, 
+        <'del', A1, $A2, c2, h(<<'root', H, A1, c1, tid>, s1>)>, s2>
+   ),
+   In( <<'cap', H, tid, 'fixed', op, v>, sc> ), In( $R ), !Pk( H, pkH ),
+   !Pk( A1, pkA1 ), !Ltk( $A2, k2 )
+   ]
+  --[
+  Eq( verify(s1, <'root', H, A1, c1, tid>, pkH), true ),
+  Eq( verify(s2, <'del', A1, $A2, c2, h(<<'root', H, A1, c1, tid>, s1>)>,
+             pkA1),
+      true
+  ),
+  Eq( verify(sc, <'cap', H, tid, 'fixed', op, v>, pkH), true ),
+  Request( $A2, <op, v>, tid )
+  ]->
+   [
+   Out( <'req', <op, v>, <'root', H, A1, c1, tid>, s1, 
+         <'del', A1, $A2, c2, h(<<'root', H, A1, c1, tid>, s1>)>, s2, 
+         sign(<'req', <op, v>, $R, 
+               h(<<'root', H, A1, c1, tid>, s1, 
+                  <'del', A1, $A2, c2, h(<<'root', H, A1, c1, tid>, s1>)>, s2>)
+              >,
+              k2)
+        >
+   )
+   ]
+
+  /*
+  rule (modulo AC) Agent2_honest_request_fixed:
+     [
+     In( <<'root', H, A1, c1, tid>, s1, 
+          <'del', A1, $A2, c2, h(<<'root', H, A1, c1, tid>, s1>)>, s2>
+     ),
+     In( <<'cap', H, tid, 'fixed', op, v>, sc> ), In( $R ), !Pk( H, pkH ),
+     !Pk( A1, pkA1 ), !Ltk( $A2, k2 )
+     ]
+    --[
+    Eq( z, true ), Eq( z.1, true ), Eq( z.2, true ),
+    Request( $A2, <op, v>, tid )
+    ]->
+     [
+     Out( <'req', <op, v>, <'root', H, A1, c1, tid>, s1, 
+           <'del', A1, $A2, c2, h(<<'root', H, A1, c1, tid>, s1>)>, s2, 
+           sign(<'req', <op, v>, $R, 
+                 h(<<'root', H, A1, c1, tid>, s1, 
+                    <'del', A1, $A2, c2, h(<<'root', H, A1, c1, tid>, s1>)>, s2>)
+                >,
+                k2)
+          >
+     )
+     ]
+    variants (modulo AC)
+    1. $A2   = $A2.39
+       A1    = A1.41
+       H     = H.42
+       c1    = c1.43
+       c2    = c2.44
+       op    = op.46
+       pkA1  = pkA1.47
+       pkH   = pkH.48
+       s1    = s1.49
+       s2    = s2.50
+       sc    = sc.51
+       tid   = tid.52
+       v     = v.53
+       z     = verify(s1.49, <'root', H.42, A1.41, c1.43, tid.52>, pkH.48)
+       z.1   = verify(s2.50,
+                      <'del', A1.41, $A2.39, c2.44, 
+                       h(<<'root', H.42, A1.41, c1.43, tid.52>, s1.49>)>,
+                      pkA1.47)
+       z.2   = verify(sc.51, <'cap', H.42, tid.52, 'fixed', op.46, v.53>,
+                      pkH.48)
+    
+    2. $A2   = $A2.123
+       A1    = A1.125
+       H     = H.126
+       c1    = c1.127
+       c2    = c2.128
+       op    = op.130
+       pkA1  = pkA1.131
+       pkH   = pk(x.244)
+       s1    = s1.133
+       s2    = s2.134
+       sc    = sign(<'cap', H.126, tid.136, 'fixed', op.130, v.137>, x.244)
+       tid   = tid.136
+       v     = v.137
+       z     = verify(s1.133, <'root', H.126, A1.125, c1.127, tid.136>,
+                      pk(x.244))
+       z.1   = verify(s2.134,
+                      <'del', A1.125, $A2.123, c2.128, 
+                       h(<<'root', H.126, A1.125, c1.127, tid.136>, s1.133>)>,
+                      pkA1.131)
+       z.2   = true
+    
+    3. $A2   = $A2.124
+       A1    = A1.126
+       H     = H.127
+       c1    = c1.128
+       c2    = c2.129
+       op    = op.131
+       pkA1  = pkA1.132
+       pkH   = pk(x.246)
+       s1    = sign(<'root', H.127, A1.126, c1.128, tid.137>, x.246)
+       s2    = s2.135
+       sc    = sc.136
+       tid   = tid.137
+       v     = v.138
+       z     = true
+       z.1   = verify(s2.135,
+                      <'del', A1.126, $A2.124, c2.129, 
+                       h(<<'root', H.127, A1.126, c1.128, tid.137>, 
+                          sign(<'root', H.127, A1.126, c1.128, tid.137>, x.246)>)
+                      >,
+                      pkA1.132)
+       z.2   = verify(sc.136, <'cap', H.127, tid.137, 'fixed', op.131, v.138>,
+                      pk(x.246))
+    
+    4. $A2   = $A2.124
+       A1    = A1.126
+       H     = H.127
+       c1    = c1.128
+       c2    = c2.129
+       op    = op.131
+       pkA1  = pkA1.132
+       pkH   = pk(x.246)
+       s1    = sign(<'root', H.127, A1.126, c1.128, tid.137>, x.246)
+       s2    = s2.135
+       sc    = sign(<'cap', H.127, tid.137, 'fixed', op.131, v.138>, x.246)
+       tid   = tid.137
+       v     = v.138
+       z     = true
+       z.1   = verify(s2.135,
+                      <'del', A1.126, $A2.124, c2.129, 
+                       h(<<'root', H.127, A1.126, c1.128, tid.137>, 
+                          sign(<'root', H.127, A1.126, c1.128, tid.137>, x.246)>)
+                      >,
+                      pkA1.132)
+       z.2   = true
+    
+    5. $A2   = $A2.125
+       A1    = A1.127
+       H     = H.128
+       c1    = c1.129
+       c2    = c2.130
+       op    = op.132
+       pkA1  = pk(x.248)
+       pkH   = pkH.134
+       s1    = s1.135
+       s2    = sign(<'del', A1.127, $A2.125, c2.130, 
+                     h(<<'root', H.128, A1.127, c1.129, tid.138>, s1.135>)>,
+                    x.248)
+       sc    = sc.137
+       tid   = tid.138
+       v     = v.139
+       z     = verify(s1.135, <'root', H.128, A1.127, c1.129, tid.138>, pkH.134)
+       z.1   = true
+       z.2   = verify(sc.137, <'cap', H.128, tid.138, 'fixed', op.132, v.139>,
+                      pkH.134)
+    
+    6. $A2   = $A2.126
+       A1    = A1.128
+       H     = H.129
+       c1    = c1.130
+       c2    = c2.131
+       op    = op.133
+       pkA1  = pk(x.249)
+       pkH   = pk(x.250)
+       s1    = s1.136
+       s2    = sign(<'del', A1.128, $A2.126, c2.131, 
+                     h(<<'root', H.129, A1.128, c1.130, tid.139>, s1.136>)>,
+                    x.249)
+       sc    = sign(<'cap', H.129, tid.139, 'fixed', op.133, v.140>, x.250)
+       tid   = tid.139
+       v     = v.140
+       z     = verify(s1.136, <'root', H.129, A1.128, c1.130, tid.139>,
+                      pk(x.250))
+       z.1   = true
+       z.2   = true
+    
+    7. $A2   = $A2.126
+       A1    = A1.128
+       H     = H.129
+       c1    = c1.130
+       c2    = c2.131
+       op    = op.133
+       pkA1  = pk(x.249)
+       pkH   = pk(x.250)
+       s1    = sign(<'root', H.129, A1.128, c1.130, tid.139>, x.250)
+       s2    = sign(<'del', A1.128, $A2.126, c2.131, 
+                     h(<<'root', H.129, A1.128, c1.130, tid.139>, 
+                        sign(<'root', H.129, A1.128, c1.130, tid.139>, x.250)>)
+                    >,
+                    x.249)
+       sc    = sc.138
+       tid   = tid.139
+       v     = v.140
+       z     = true
+       z.1   = true
+       z.2   = verify(sc.138, <'cap', H.129, tid.139, 'fixed', op.133, v.140>,
+                      pk(x.250))
+    
+    8. $A2   = $A2.126
+       A1    = A1.128
+       H     = H.129
+       c1    = c1.130
+       c2    = c2.131
+       op    = op.133
+       pkA1  = pk(x.249)
+       pkH   = pk(x.250)
+       s1    = sign(<'root', H.129, A1.128, c1.130, tid.139>, x.250)
+       s2    = sign(<'del', A1.128, $A2.126, c2.131, 
+                     h(<<'root', H.129, A1.128, c1.130, tid.139>, 
+                        sign(<'root', H.129, A1.128, c1.130, tid.139>, x.250)>)
+                    >,
+                    x.249)
+       sc    = sign(<'cap', H.129, tid.139, 'fixed', op.133, v.140>, x.250)
+       tid   = tid.139
+       v     = v.140
+       z     = true
+       z.1   = true
+       z.2   = true
+  */
+
+rule (modulo E) Agent2_honest_request_hole:
+   [
+   In( <<'root', H, A1, c1, tid>, s1, 
+        <'del', A1, $A2, c2, h(<<'root', H, A1, c1, tid>, s1>)>, s2>
+   ),
+   In( <<'cap', H, tid, 'hole', op, S>, sc> ),
+   In( <<'prov', S, tid, v>, sp> ), In( $R ), !Pk( H, pkH ),
+   !Pk( A1, pkA1 ), !Pk( S, pkS ), !Ltk( $A2, k2 )
+   ]
+  --[
+  Eq( verify(s1, <'root', H, A1, c1, tid>, pkH), true ),
+  Eq( verify(s2, <'del', A1, $A2, c2, h(<<'root', H, A1, c1, tid>, s1>)>,
+             pkA1),
+      true
+  ),
+  Eq( verify(sc, <'cap', H, tid, 'hole', op, S>, pkH), true ),
+  Eq( verify(sp, <'prov', S, tid, v>, pkS), true ),
+  Request( $A2, <op, v>, tid )
+  ]->
+   [
+   Out( <'req', <op, v>, <'root', H, A1, c1, tid>, s1, 
+         <'del', A1, $A2, c2, h(<<'root', H, A1, c1, tid>, s1>)>, s2, 
+         sign(<'req', <op, v>, $R, 
+               h(<<'root', H, A1, c1, tid>, s1, 
+                  <'del', A1, $A2, c2, h(<<'root', H, A1, c1, tid>, s1>)>, s2>)
+              >,
+              k2)
+        >
+   )
+   ]
+
+  /*
+  rule (modulo AC) Agent2_honest_request_hole:
+     [
+     In( <<'root', H, A1, c1, tid>, s1, 
+          <'del', A1, $A2, c2, h(<<'root', H, A1, c1, tid>, s1>)>, s2>
+     ),
+     In( <<'cap', H, tid, 'hole', op, S>, sc> ),
+     In( <<'prov', S, tid, v>, sp> ), In( $R ), !Pk( H, pkH ),
+     !Pk( A1, pkA1 ), !Pk( S, pkS ), !Ltk( $A2, k2 )
+     ]
+    --[
+    Eq( z, true ), Eq( z.1, true ), Eq( z.2, true ), Eq( z.3, true ),
+    Request( $A2, <op, v>, tid )
+    ]->
+     [
+     Out( <'req', <op, v>, <'root', H, A1, c1, tid>, s1, 
+           <'del', A1, $A2, c2, h(<<'root', H, A1, c1, tid>, s1>)>, s2, 
+           sign(<'req', <op, v>, $R, 
+                 h(<<'root', H, A1, c1, tid>, s1, 
+                    <'del', A1, $A2, c2, h(<<'root', H, A1, c1, tid>, s1>)>, s2>)
+                >,
+                k2)
+          >
+     )
+     ]
+    variants (modulo AC)
+     1. $A2   = $A2.47
+        A1    = A1.49
+        H     = H.50
+        S     = S.51
+        c1    = c1.52
+        c2    = c2.53
+        op    = op.55
+        pkA1  = pkA1.56
+        pkH   = pkH.57
+        pkS   = pkS.58
+        s1    = s1.59
+        s2    = s2.60
+        sc    = sc.61
+        sp    = sp.62
+        tid   = tid.63
+        v     = v.64
+        z     = verify(s1.59, <'root', H.50, A1.49, c1.52, tid.63>, pkH.57)
+        z.1   = verify(s2.60,
+                       <'del', A1.49, $A2.47, c2.53, 
+                        h(<<'root', H.50, A1.49, c1.52, tid.63>, s1.59>)>,
+                       pkA1.56)
+        z.2   = verify(sc.61, <'cap', H.50, tid.63, 'hole', op.55, S.51>, pkH.57)
+        z.3   = verify(sp.62, <'prov', S.51, tid.63, v.64>, pkS.58)
+    
+     2. $A2   = $A2.177
+        A1    = A1.179
+        H     = H.180
+        S     = S.181
+        c1    = c1.182
+        c2    = c2.183
+        op    = op.185
+        pkA1  = pkA1.186
+        pkH   = pkH.187
+        pkS   = pk(x.352)
+        s1    = s1.189
+        s2    = s2.190
+        sc    = sc.191
+        sp    = sign(<'prov', S.181, tid.193, v.194>, x.352)
+        tid   = tid.193
+        v     = v.194
+        z     = verify(s1.189, <'root', H.180, A1.179, c1.182, tid.193>, pkH.187)
+        z.1   = verify(s2.190,
+                       <'del', A1.179, $A2.177, c2.183, 
+                        h(<<'root', H.180, A1.179, c1.182, tid.193>, s1.189>)>,
+                       pkA1.186)
+        z.2   = verify(sc.191, <'cap', H.180, tid.193, 'hole', op.185, S.181>,
+                       pkH.187)
+        z.3   = true
+    
+     3. $A2   = $A2.177
+        A1    = A1.179
+        H     = H.180
+        S     = S.181
+        c1    = c1.182
+        c2    = c2.183
+        op    = op.185
+        pkA1  = pkA1.186
+        pkH   = pk(x.352)
+        pkS   = pkS.188
+        s1    = s1.189
+        s2    = s2.190
+        sc    = sign(<'cap', H.180, tid.193, 'hole', op.185, S.181>, x.352)
+        sp    = sp.192
+        tid   = tid.193
+        v     = v.194
+        z     = verify(s1.189, <'root', H.180, A1.179, c1.182, tid.193>,
+                       pk(x.352))
+        z.1   = verify(s2.190,
+                       <'del', A1.179, $A2.177, c2.183, 
+                        h(<<'root', H.180, A1.179, c1.182, tid.193>, s1.189>)>,
+                       pkA1.186)
+        z.2   = true
+        z.3   = verify(sp.192, <'prov', S.181, tid.193, v.194>, pkS.188)
+    
+     4. $A2   = $A2.178
+        A1    = A1.180
+        H     = H.181
+        S     = S.182
+        c1    = c1.183
+        c2    = c2.184
+        op    = op.186
+        pkA1  = pkA1.187
+        pkH   = pk(x.353)
+        pkS   = pk(x.354)
+        s1    = s1.190
+        s2    = s2.191
+        sc    = sign(<'cap', H.181, tid.194, 'hole', op.186, S.182>, x.353)
+        sp    = sign(<'prov', S.182, tid.194, v.195>, x.354)
+        tid   = tid.194
+        v     = v.195
+        z     = verify(s1.190, <'root', H.181, A1.180, c1.183, tid.194>,
+                       pk(x.353))
+        z.1   = verify(s2.191,
+                       <'del', A1.180, $A2.178, c2.184, 
+                        h(<<'root', H.181, A1.180, c1.183, tid.194>, s1.190>)>,
+                       pkA1.187)
+        z.2   = true
+        z.3   = true
+    
+     5. $A2   = $A2.178
+        A1    = A1.180
+        H     = H.181
+        S     = S.182
+        c1    = c1.183
+        c2    = c2.184
+        op    = op.186
+        pkA1  = pkA1.187
+        pkH   = pk(x.354)
+        pkS   = pkS.189
+        s1    = sign(<'root', H.181, A1.180, c1.183, tid.194>, x.354)
+        s2    = s2.191
+        sc    = sc.192
+        sp    = sp.193
+        tid   = tid.194
+        v     = v.195
+        z     = true
+        z.1   = verify(s2.191,
+                       <'del', A1.180, $A2.178, c2.184, 
+                        h(<<'root', H.181, A1.180, c1.183, tid.194>, 
+                           sign(<'root', H.181, A1.180, c1.183, tid.194>, x.354)>)
+                       >,
+                       pkA1.187)
+        z.2   = verify(sc.192, <'cap', H.181, tid.194, 'hole', op.186, S.182>,
+                       pk(x.354))
+        z.3   = verify(sp.193, <'prov', S.182, tid.194, v.195>, pkS.189)
+    
+     6. $A2   = $A2.178
+        A1    = A1.180
+        H     = H.181
+        S     = S.182
+        c1    = c1.183
+        c2    = c2.184
+        op    = op.186
+        pkA1  = pkA1.187
+        pkH   = pk(x.354)
+        pkS   = pkS.189
+        s1    = sign(<'root', H.181, A1.180, c1.183, tid.194>, x.354)
+        s2    = s2.191
+        sc    = sign(<'cap', H.181, tid.194, 'hole', op.186, S.182>, x.354)
+        sp    = sp.193
+        tid   = tid.194
+        v     = v.195
+        z     = true
+        z.1   = verify(s2.191,
+                       <'del', A1.180, $A2.178, c2.184, 
+                        h(<<'root', H.181, A1.180, c1.183, tid.194>, 
+                           sign(<'root', H.181, A1.180, c1.183, tid.194>, x.354)>)
+                       >,
+                       pkA1.187)
+        z.2   = true
+        z.3   = verify(sp.193, <'prov', S.182, tid.194, v.195>, pkS.189)
+    
+     7. $A2   = $A2.179
+        A1    = A1.181
+        H     = H.182
+        S     = S.183
+        c1    = c1.184
+        c2    = c2.185
+        op    = op.187
+        pkA1  = pkA1.188
+        pkH   = pk(x.355)
+        pkS   = pk(x.356)
+        s1    = sign(<'root', H.182, A1.181, c1.184, tid.195>, x.355)
+        s2    = s2.192
+        sc    = sc.193
+        sp    = sign(<'prov', S.183, tid.195, v.196>, x.356)
+        tid   = tid.195
+        v     = v.196
+        z     = true
+        z.1   = verify(s2.192,
+                       <'del', A1.181, $A2.179, c2.185, 
+                        h(<<'root', H.182, A1.181, c1.184, tid.195>, 
+                           sign(<'root', H.182, A1.181, c1.184, tid.195>, x.355)>)
+                       >,
+                       pkA1.188)
+        z.2   = verify(sc.193, <'cap', H.182, tid.195, 'hole', op.187, S.183>,
+                       pk(x.355))
+        z.3   = true
+    
+     8. $A2   = $A2.179
+        A1    = A1.181
+        H     = H.182
+        S     = S.183
+        c1    = c1.184
+        c2    = c2.185
+        op    = op.187
+        pkA1  = pkA1.188
+        pkH   = pk(x.355)
+        pkS   = pk(x.356)
+        s1    = sign(<'root', H.182, A1.181, c1.184, tid.195>, x.355)
+        s2    = s2.192
+        sc    = sign(<'cap', H.182, tid.195, 'hole', op.187, S.183>, x.355)
+        sp    = sign(<'prov', S.183, tid.195, v.196>, x.356)
+        tid   = tid.195
+        v     = v.196
+        z     = true
+        z.1   = verify(s2.192,
+                       <'del', A1.181, $A2.179, c2.185, 
+                        h(<<'root', H.182, A1.181, c1.184, tid.195>, 
+                           sign(<'root', H.182, A1.181, c1.184, tid.195>, x.355)>)
+                       >,
+                       pkA1.188)
+        z.2   = true
+        z.3   = true
+    
+     9. $A2   = $A2.179
+        A1    = A1.181
+        H     = H.182
+        S     = S.183
+        c1    = c1.184
+        c2    = c2.185
+        op    = op.187
+        pkA1  = pk(x.356)
+        pkH   = pkH.189
+        pkS   = pkS.190
+        s1    = s1.191
+        s2    = sign(<'del', A1.181, $A2.179, c2.185, 
+                      h(<<'root', H.182, A1.181, c1.184, tid.195>, s1.191>)>,
+                     x.356)
+        sc    = sc.193
+        sp    = sp.194
+        tid   = tid.195
+        v     = v.196
+        z     = verify(s1.191, <'root', H.182, A1.181, c1.184, tid.195>, pkH.189)
+        z.1   = true
+        z.2   = verify(sc.193, <'cap', H.182, tid.195, 'hole', op.187, S.183>,
+                       pkH.189)
+        z.3   = verify(sp.194, <'prov', S.183, tid.195, v.196>, pkS.190)
+    
+    10. $A2   = $A2.180
+        A1    = A1.182
+        H     = H.183
+        S     = S.184
+        c1    = c1.185
+        c2    = c2.186
+        op    = op.188
+        pkA1  = pk(x.357)
+        pkH   = pk(x.358)
+        pkS   = pkS.191
+        s1    = s1.192
+        s2    = sign(<'del', A1.182, $A2.180, c2.186, 
+                      h(<<'root', H.183, A1.182, c1.185, tid.196>, s1.192>)>,
+                     x.357)
+        sc    = sign(<'cap', H.183, tid.196, 'hole', op.188, S.184>, x.358)
+        sp    = sp.195
+        tid   = tid.196
+        v     = v.197
+        z     = verify(s1.192, <'root', H.183, A1.182, c1.185, tid.196>,
+                       pk(x.358))
+        z.1   = true
+        z.2   = true
+        z.3   = verify(sp.195, <'prov', S.184, tid.196, v.197>, pkS.191)
+    
+    11. $A2   = $A2.180
+        A1    = A1.182
+        H     = H.183
+        S     = S.184
+        c1    = c1.185
+        c2    = c2.186
+        op    = op.188
+        pkA1  = pk(x.357)
+        pkH   = pk(x.358)
+        pkS   = pkS.191
+        s1    = sign(<'root', H.183, A1.182, c1.185, tid.196>, x.358)
+        s2    = sign(<'del', A1.182, $A2.180, c2.186, 
+                      h(<<'root', H.183, A1.182, c1.185, tid.196>, 
+                         sign(<'root', H.183, A1.182, c1.185, tid.196>, x.358)>)
+                     >,
+                     x.357)
+        sc    = sc.194
+        sp    = sp.195
+        tid   = tid.196
+        v     = v.197
+        z     = true
+        z.1   = true
+        z.2   = verify(sc.194, <'cap', H.183, tid.196, 'hole', op.188, S.184>,
+                       pk(x.358))
+        z.3   = verify(sp.195, <'prov', S.184, tid.196, v.197>, pkS.191)
+    
+    12. $A2   = $A2.180
+        A1    = A1.182
+        H     = H.183
+        S     = S.184
+        c1    = c1.185
+        c2    = c2.186
+        op    = op.188
+        pkA1  = pk(x.357)
+        pkH   = pk(x.358)
+        pkS   = pkS.191
+        s1    = sign(<'root', H.183, A1.182, c1.185, tid.196>, x.358)
+        s2    = sign(<'del', A1.182, $A2.180, c2.186, 
+                      h(<<'root', H.183, A1.182, c1.185, tid.196>, 
+                         sign(<'root', H.183, A1.182, c1.185, tid.196>, x.358)>)
+                     >,
+                     x.357)
+        sc    = sign(<'cap', H.183, tid.196, 'hole', op.188, S.184>, x.358)
+        sp    = sp.195
+        tid   = tid.196
+        v     = v.197
+        z     = true
+        z.1   = true
+        z.2   = true
+        z.3   = verify(sp.195, <'prov', S.184, tid.196, v.197>, pkS.191)
+    
+    13. $A2   = $A2.181
+        A1    = A1.183
+        H     = H.184
+        S     = S.185
+        c1    = c1.186
+        c2    = c2.187
+        op    = op.189
+        pkA1  = pk(x.358)
+        pkH   = pkH.191
+        pkS   = pk(x.360)
+        s1    = s1.193
+        s2    = sign(<'del', A1.183, $A2.181, c2.187, 
+                      h(<<'root', H.184, A1.183, c1.186, tid.197>, s1.193>)>,
+                     x.358)
+        sc    = sc.195
+        sp    = sign(<'prov', S.185, tid.197, v.198>, x.360)
+        tid   = tid.197
+        v     = v.198
+        z     = verify(s1.193, <'root', H.184, A1.183, c1.186, tid.197>, pkH.191)
+        z.1   = true
+        z.2   = verify(sc.195, <'cap', H.184, tid.197, 'hole', op.189, S.185>,
+                       pkH.191)
+        z.3   = true
+    
+    14. $A2   = $A2.181
+        A1    = A1.183
+        H     = H.184
+        S     = S.185
+        c1    = c1.186
+        c2    = c2.187
+        op    = op.189
+        pkA1  = pk(x.358)
+        pkH   = pk(x.359)
+        pkS   = pk(x.360)
+        s1    = s1.193
+        s2    = sign(<'del', A1.183, $A2.181, c2.187, 
+                      h(<<'root', H.184, A1.183, c1.186, tid.197>, s1.193>)>,
+                     x.358)
+        sc    = sign(<'cap', H.184, tid.197, 'hole', op.189, S.185>, x.359)
+        sp    = sign(<'prov', S.185, tid.197, v.198>, x.360)
+        tid   = tid.197
+        v     = v.198
+        z     = verify(s1.193, <'root', H.184, A1.183, c1.186, tid.197>,
+                       pk(x.359))
+        z.1   = true
+        z.2   = true
+        z.3   = true
+    
+    15. $A2   = $A2.181
+        A1    = A1.183
+        H     = H.184
+        S     = S.185
+        c1    = c1.186
+        c2    = c2.187
+        op    = op.189
+        pkA1  = pk(x.358)
+        pkH   = pk(x.359)
+        pkS   = pk(x.360)
+        s1    = sign(<'root', H.184, A1.183, c1.186, tid.197>, x.359)
+        s2    = sign(<'del', A1.183, $A2.181, c2.187, 
+                      h(<<'root', H.184, A1.183, c1.186, tid.197>, 
+                         sign(<'root', H.184, A1.183, c1.186, tid.197>, x.359)>)
+                     >,
+                     x.358)
+        sc    = sc.195
+        sp    = sign(<'prov', S.185, tid.197, v.198>, x.360)
+        tid   = tid.197
+        v     = v.198
+        z     = true
+        z.1   = true
+        z.2   = verify(sc.195, <'cap', H.184, tid.197, 'hole', op.189, S.185>,
+                       pk(x.359))
+        z.3   = true
+    
+    16. $A2   = $A2.181
+        A1    = A1.183
+        H     = H.184
+        S     = S.185
+        c1    = c1.186
+        c2    = c2.187
+        op    = op.189
+        pkA1  = pk(x.358)
+        pkH   = pk(x.359)
+        pkS   = pk(x.360)
+        s1    = sign(<'root', H.184, A1.183, c1.186, tid.197>, x.359)
+        s2    = sign(<'del', A1.183, $A2.181, c2.187, 
+                      h(<<'root', H.184, A1.183, c1.186, tid.197>, 
+                         sign(<'root', H.184, A1.183, c1.186, tid.197>, x.359)>)
+                     >,
+                     x.358)
+        sc    = sign(<'cap', H.184, tid.197, 'hole', op.189, S.185>, x.359)
+        sp    = sign(<'prov', S.185, tid.197, v.198>, x.360)
+        tid   = tid.197
+        v     = v.198
+        z     = true
+        z.1   = true
+        z.2   = true
+        z.3   = true
+  */
+
+rule (modulo E) Resource_receive_bearer:
+   [
+   In( <'req', a, <'root', H, A1, c1, tid>, s1, 
+        <'del', A1, A2, c2, h(<<'root', H, A1, c1, tid>, s1>)>, s2, sr>
+   ),
+   !Pk( H, pkH ), !Pk( A1, pkA1 )
+   ]
+  --[
+  Eq( verify(s1, <'root', H, A1, c1, tid>, pkH), true ),
+  Eq( verify(s2, <'del', A1, A2, c2, h(<<'root', H, A1, c1, tid>, s1>)>,
+             pkA1),
+      true
+  ),
+  Check( c1, a ), Check( c2, a ), Act( a )
+  ]->
+   [ Received( $R, A2, a, H, A1, c1, c2, tid ) ]
+
+  /*
+  rule (modulo AC) Resource_receive_bearer:
+     [
+     In( <'req', a, <'root', H, A1, c1, tid>, s1, 
+          <'del', A1, A2, c2, h(<<'root', H, A1, c1, tid>, s1>)>, s2, sr>
+     ),
+     !Pk( H, pkH ), !Pk( A1, pkA1 )
+     ]
+    --[
+    Eq( z, true ), Eq( z.1, true ), Check( c1, a ), Check( c2, a ), Act( a )
+    ]->
+     [ Received( $R, A2, a, H, A1, c1, c2, tid ) ]
+    variants (modulo AC)
+    1. A1    = A1.31
+       A2    = A2.32
+       H     = H.33
+       c1    = c1.35
+       c2    = c2.36
+       pkA1  = pkA1.37
+       pkH   = pkH.38
+       s1    = s1.39
+       s2    = s2.40
+       tid   = tid.42
+       z     = verify(s1.39, <'root', H.33, A1.31, c1.35, tid.42>, pkH.38)
+       z.1   = verify(s2.40,
+                      <'del', A1.31, A2.32, c2.36, 
+                       h(<<'root', H.33, A1.31, c1.35, tid.42>, s1.39>)>,
+                      pkA1.37)
+    
+    2. A1    = A1.60
+       A2    = A2.61
+       H     = H.62
+       c1    = c1.64
+       c2    = c2.65
+       pkA1  = pk(x.117)
+       pkH   = pkH.67
+       s1    = s1.68
+       s2    = sign(<'del', A1.60, A2.61, c2.65, 
+                     h(<<'root', H.62, A1.60, c1.64, tid.71>, s1.68>)>,
+                    x.117)
+       tid   = tid.71
+       z     = verify(s1.68, <'root', H.62, A1.60, c1.64, tid.71>, pkH.67)
+       z.1   = true
+    
+    3. A1    = A1.61
+       A2    = A2.62
+       H     = H.63
+       c1    = c1.65
+       c2    = c2.66
+       pkA1  = pkA1.67
+       pkH   = pk(x.119)
+       s1    = sign(<'root', H.63, A1.61, c1.65, tid.72>, x.119)
+       s2    = s2.70
+       tid   = tid.72
+       z     = true
+       z.1   = verify(s2.70,
+                      <'del', A1.61, A2.62, c2.66, 
+                       h(<<'root', H.63, A1.61, c1.65, tid.72>, 
+                          sign(<'root', H.63, A1.61, c1.65, tid.72>, x.119)>)
+                      >,
+                      pkA1.67)
+    
+    4. A1    = A1.61
+       A2    = A2.62
+       H     = H.63
+       c1    = c1.65
+       c2    = c2.66
+       pkA1  = pk(x.118)
+       pkH   = pk(x.119)
+       s1    = sign(<'root', H.63, A1.61, c1.65, tid.72>, x.119)
+       s2    = sign(<'del', A1.61, A2.62, c2.66, 
+                     h(<<'root', H.63, A1.61, c1.65, tid.72>, 
+                        sign(<'root', H.63, A1.61, c1.65, tid.72>, x.119)>)
+                    >,
+                    x.118)
+       tid   = tid.72
+       z     = true
+       z.1   = true
+  */
+
+rule (modulo E) Resource_accept_any_provenance:
+   [
+   Received( R, P, <op, v>, H, A1, c1, c2, tid ),
+   In( <<'prov', S, tid, v>, sp> ), !Pk( S, pkS )
+   ]
+  --[
+  Eq( verify(sp, <'prov', S, tid, v>, pkS), true ),
+  Accept( R, P, <op, v>, tid ), Chain( R, H, A1, c1, P, c2, tid )
+  ]->
+   [ ]
+
+  /*
+  rule (modulo AC) Resource_accept_any_provenance:
+     [
+     Received( R, P, <op, v>, H, A1, c1, c2, tid ),
+     In( <<'prov', S, tid, v>, sp> ), !Pk( S, pkS )
+     ]
+    --[
+    Eq( z, true ), Accept( R, P, <op, v>, tid ),
+    Chain( R, H, A1, c1, P, c2, tid )
+    ]->
+     [ ]
+    variants (modulo AC)
+    1. S     = S.16
+       pkS   = pkS.20
+       sp    = sp.21
+       tid   = tid.22
+       v     = v.23
+       z     = verify(sp.21, <'prov', S.16, tid.22, v.23>, pkS.20)
+    
+    2. S     = S.22
+       pkS   = pk(x.36)
+       sp    = sign(<'prov', S.22, tid.28, v.29>, x.36)
+       tid   = tid.28
+       v     = v.29
+       z     = true
+  */
+
+lemma executable_static_task_conformant:
+  exists-trace
+  "∃ R P a tid H #i #j #k.
+    (((Accept( R, P, a, tid ) @ #i) ∧ (TaskStatic( tid ) @ #j)) ∧
+     (Intends( H, tid, <'fixed', a> ) @ #k)) ∧
+    (∀ X #r. (Reveal( X ) @ #r) ⇒ (⊥))"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ R P a tid H #i #j #k.
+  (Accept( R, P, a, tid ) @ #i) ∧
+  (TaskStatic( tid ) @ #j) ∧
+  (Intends( H, tid, <'fixed', a> ) @ #k)
+ ∧
+  ∀ X #r. (Reveal( X ) @ #r) ⇒ ⊥"
+*/
+simplify
+solve( Received( R, P, <op, v>, H, A1, c1, c2, ~tid ) ▶₀ #i )
+  case Resource_receive_bearer
+  solve( (c1 = <op, v>)  ∥
+         (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c1 = <op.1, 'any'>)) )
+    case case_2
+    solve( (c2 = <op, v>)  ∥
+           (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c2 = <op.1, 'any'>)) )
+      case case_2
+      solve( !Pk( S, pk(x) ) ▶₂ #i )
+        case Register
+        solve( !Ltk( $H, kH ) ▶₁ #j )
+          case Register
+          solve( Intends( H.1, ~tid, <'fixed', op, v> ) @ #k.4 )
+            case Human_static_task
+            solve( !KU( sign(<'prov', $X.2, ~tid, $repo>, ~k) ) @ #vk.16 )
+              case Source_produces
+              solve( !KU( sign(<'root', $X, $X.1, <'push', 'any'>, ~tid>, ~k.2)
+                     ) @ #vk.28 )
+                case Human_static_task
+                solve( !KU( sign(<'del', $A1, P, <'push', 'any'>, 
+                                  h(<<'root', $H, $A1, <'push', 'any'>, ~tid>, 
+                                     sign(<'root', $H, $A1, <'push', 'any'>, ~tid>, ~k.1)>)
+                                 >,
+                                 ~k.2)
+                       ) @ #vk.33 )
+                  case Agent1_honest_delegation
+                  solve( !KU( ~tid ) @ #vk.11 )
+                    case Human_static_task_case_1
+                    solve( !KU( h(<<'root', $H, $A1, <'push', 'any'>, ~tid>, 
+                                   sign(<'root', $H, $A1, <'push', 'any'>, ~tid>, ~k.1)>)
+                           ) @ #vk.34 )
+                      case Agent1_honest_delegation
+                      SOLVED // trace found
+                    qed
+                  qed
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma executable_dynamic_task_conformant:
+  exists-trace
+  "∃ R P op v tid H S #i #j #k.
+    (((Accept( R, P, <op, v>, tid ) @ #i) ∧
+      (Intends( H, tid, <'hole', op, S> ) @ #j)) ∧
+     (Produced( S, tid, v ) @ #k)) ∧
+    (∀ X #r. (Reveal( X ) @ #r) ⇒ (⊥))"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ R P op v tid H S #i #j #k.
+  (Accept( R, P, <op, v>, tid ) @ #i) ∧
+  (Intends( H, tid, <'hole', op, S> ) @ #j) ∧
+  (Produced( S, tid, v ) @ #k)
+ ∧
+  ∀ X #r. (Reveal( X ) @ #r) ⇒ ⊥"
+*/
+simplify
+solve( Received( R, P, <op, $v>, H, A1, c1, c2, tid ) ▶₀ #i )
+  case Resource_receive_bearer
+  solve( (c1 = <op, $v>)  ∥
+         (∃ op.1 x. (<op, $v> = <op.1, x>) ∧ (c1 = <op.1, 'any'>)) )
+    case case_2
+    solve( (c2 = <op, $v>)  ∥
+           (∃ op.1 x. (<op, $v> = <op.1, x>) ∧ (c2 = <op.1, 'any'>)) )
+      case case_2
+      solve( !Pk( S, pk(x) ) ▶₂ #i )
+        case Register
+        solve( !Ltk( $Src, ks ) ▶₁ #k.1 )
+          case Register
+          solve( Intends( H, tid, <'hole', op, $Src> ) @ #j )
+            case Human_dynamic_task
+            solve( !Ltk( $H, kH ) ▶₁ #j )
+              case Register
+              solve( !KU( sign(<'prov', $X.2, ~tid, $v>, ~k) ) @ #vk.16 )
+                case Source_produces
+                solve( !KU( sign(<'root', $X, $X.1, <'push', 'any'>, ~tid>, ~k.2)
+                       ) @ #vk.28 )
+                  case Human_dynamic_task
+                  solve( !KU( sign(<'del', $A1, P, <'push', 'any'>, 
+                                    h(<<'root', $H, $A1, <'push', 'any'>, ~tid>, 
+                                       sign(<'root', $H, $A1, <'push', 'any'>, ~tid>, ~k.1)>)
+                                   >,
+                                   ~k.2)
+                         ) @ #vk.33 )
+                    case Agent1_honest_delegation
+                    solve( !KU( ~tid ) @ #vk.11 )
+                      case Human_dynamic_task_case_1
+                      solve( !KU( h(<<'root', $H, $A1, <'push', 'any'>, ~tid>, 
+                                     sign(<'root', $H, $A1, <'push', 'any'>, ~tid>, ~k.1)>)
+                             ) @ #vk.34 )
+                        case Agent1_honest_delegation
+                        SOLVED // trace found
+                      qed
+                    qed
+                  qed
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma AUTH_every_hop_was_delegated:
+  all-traces
+  "∀ R H A1 c1 A2 c2 tid #i.
+    (Chain( R, H, A1, c1, A2, c2, tid ) @ #i) ⇒
+    ((∃ #j. (RootDelegated( H, A1, c1, tid ) @ #j) ∧ (#j < #i)) ∧
+     (∃ #k. (Delegated( A1, A2, c2, tid ) @ #k) ∧ (#k < #i)))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ R H A1 c1 A2 c2 tid #i.
+  (Chain( R, H, A1, c1, A2, c2, tid ) @ #i)
+ ∧
+  ((∀ #j. (RootDelegated( H, A1, c1, tid ) @ #j) ⇒ ¬(#j < #i)) ∨
+   (∀ #k. (Delegated( A1, A2, c2, tid ) @ #k) ⇒ ¬(#k < #i)))"
+*/
+simplify
+solve( (∀ #j. (RootDelegated( H, A1, c1, tid ) @ #j) ⇒ ¬(#j < #i))  ∥
+       (∀ #k. (Delegated( A1, A2, c2, tid ) @ #k) ⇒ ¬(#k < #i)) )
+  case case_1
+  solve( Received( R, A2, <op, v>, H, A1, c1, c2, tid ) ▶₀ #i )
+    case Resource_receive_bearer
+    solve( (c1 = <op, v>)  ∥
+           (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c1 = <op.1, 'any'>)) )
+      case case_1
+      solve( (c2 = <op, v>)  ∥
+             (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c2 = <op.1, 'any'>)) )
+        case case_1
+        solve( !Pk( S, pk(x) ) ▶₂ #i )
+          case Register
+          solve( !KU( sign(<'prov', $X.2, tid, v>, ~k) ) @ #vk.17 )
+            case Source_produces
+            solve( !KU( sign(<'root', $X, $X.1, <op, $v>, tid>, ~k.1) ) @ #vk.27 )
+              case Human_dynamic_task
+              by contradiction /* from formulas */
+            next
+              case Human_static_task
+              by contradiction /* from formulas */
+            next
+              case c_sign
+              by solve( !KU( ~k.1 ) @ #vk.35 )
+            qed
+          next
+            case c_sign
+            by solve( !KU( ~k ) @ #vk.35 )
+          qed
+        qed
+      next
+        case case_2
+        solve( !Pk( S, pk(x) ) ▶₂ #i )
+          case Register
+          solve( !KU( sign(<'prov', $X.2, tid, v>, ~k) ) @ #vk.15 )
+            case Source_produces
+            solve( !KU( sign(<'root', $X, $X.1, <op, $v>, tid>, ~k.1) ) @ #vk.25 )
+              case Human_dynamic_task
+              by contradiction /* from formulas */
+            next
+              case Human_static_task
+              by contradiction /* from formulas */
+            next
+              case c_sign
+              by solve( !KU( ~k.1 ) @ #vk.37 )
+            qed
+          next
+            case c_sign
+            by solve( !KU( ~k ) @ #vk.37 )
+          qed
+        qed
+      qed
+    next
+      case case_2
+      solve( (c2 = <op, v>)  ∥
+             (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c2 = <op.1, 'any'>)) )
+        case case_1
+        solve( !Pk( S, pk(x) ) ▶₂ #i )
+          case Register
+          solve( !KU( sign(<'prov', $X.2, tid, v>, ~k) ) @ #vk.17 )
+            case Source_produces
+            solve( !KU( sign(<'root', $X, $X.1, <op, 'any'>, tid>, ~k.1) ) @ #vk.28 )
+              case Human_dynamic_task
+              by contradiction /* from formulas */
+            next
+              case Human_static_task
+              by contradiction /* from formulas */
+            next
+              case c_sign
+              by solve( !KU( ~k.1 ) @ #vk.37 )
+            qed
+          next
+            case c_sign
+            by solve( !KU( ~k ) @ #vk.37 )
+          qed
+        qed
+      next
+        case case_2
+        solve( !Pk( S, pk(x) ) ▶₂ #i )
+          case Register
+          solve( !KU( sign(<'prov', $X.2, tid, v>, ~k) ) @ #vk.15 )
+            case Source_produces
+            solve( !KU( sign(<'root', $X, $X.1, <op, 'any'>, tid>, ~k.1) ) @ #vk.28 )
+              case Human_dynamic_task
+              by contradiction /* from formulas */
+            next
+              case Human_static_task
+              by contradiction /* from formulas */
+            next
+              case c_sign
+              by solve( !KU( ~k.1 ) @ #vk.37 )
+            qed
+          next
+            case c_sign
+            by solve( !KU( ~k ) @ #vk.37 )
+          qed
+        qed
+      qed
+    qed
+  qed
+next
+  case case_2
+  solve( Received( R, A2, <op, v>, H, A1, c1, c2, tid ) ▶₀ #i )
+    case Resource_receive_bearer
+    solve( (c1 = <op, v>)  ∥
+           (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c1 = <op.1, 'any'>)) )
+      case case_1
+      solve( (c2 = <op, v>)  ∥
+             (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c2 = <op.1, 'any'>)) )
+        case case_1
+        solve( !Pk( S, pk(x) ) ▶₂ #i )
+          case Register
+          solve( !KU( sign(<'prov', $X.2, tid, v>, ~k) ) @ #vk.17 )
+            case Source_produces
+            solve( !KU( sign(<'root', $X, $X.1, <op, $v>, tid>, ~k.1) ) @ #vk.27 )
+              case Human_dynamic_task
+              by contradiction /* from formulas */
+            next
+              case Human_static_task
+              by contradiction /* from formulas */
+            next
+              case c_sign
+              by solve( !KU( ~k.1 ) @ #vk.35 )
+            qed
+          next
+            case c_sign
+            by solve( !KU( ~k ) @ #vk.35 )
+          qed
+        qed
+      next
+        case case_2
+        solve( !Pk( S, pk(x) ) ▶₂ #i )
+          case Register
+          solve( !KU( sign(<'prov', $X.2, tid, v>, ~k) ) @ #vk.15 )
+            case Source_produces
+            solve( !KU( sign(<'root', $X, $X.1, <op, $v>, tid>, ~k.1) ) @ #vk.25 )
+              case Human_dynamic_task
+              by contradiction /* from formulas */
+            next
+              case Human_static_task
+              by contradiction /* from formulas */
+            next
+              case c_sign
+              by solve( !KU( ~k.1 ) @ #vk.37 )
+            qed
+          next
+            case c_sign
+            by solve( !KU( ~k ) @ #vk.37 )
+          qed
+        qed
+      qed
+    next
+      case case_2
+      solve( (c2 = <op, v>)  ∥
+             (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c2 = <op.1, 'any'>)) )
+        case case_1
+        solve( !Pk( S, pk(x) ) ▶₂ #i )
+          case Register
+          solve( !KU( sign(<'prov', $X.2, tid, v>, ~k) ) @ #vk.17 )
+            case Source_produces
+            solve( !KU( sign(<'root', $X, $X.1, <op, 'any'>, tid>, ~k.1) ) @ #vk.28 )
+              case Human_dynamic_task
+              solve( !KU( sign(<'del', $X.1, A2, <'push', $v>, 
+                                h(<<'root', $X, $X.1, <'push', 'any'>, ~tid>, 
+                                   sign(<'root', $X, $X.1, <'push', 'any'>, ~tid>, ~k.1)>)
+                               >,
+                               ~k.2)
+                     ) @ #vk.33 )
+                case Agent1_honest_delegation
+                by contradiction /* from formulas */
+              next
+                case c_sign
+                by solve( !KU( ~k.2 ) @ #vk.37 )
+              qed
+            next
+              case Human_static_task
+              solve( !KU( sign(<'del', $X.1, A2, <'push', $v>, 
+                                h(<<'root', $X, $X.1, <'push', 'any'>, ~tid>, 
+                                   sign(<'root', $X, $X.1, <'push', 'any'>, ~tid>, ~k.1)>)
+                               >,
+                               ~k.2)
+                     ) @ #vk.33 )
+                case Agent1_honest_delegation
+                by contradiction /* from formulas */
+              next
+                case c_sign
+                by solve( !KU( ~k.2 ) @ #vk.37 )
+              qed
+            next
+              case c_sign
+              by solve( !KU( ~k.1 ) @ #vk.37 )
+            qed
+          next
+            case c_sign
+            by solve( !KU( ~k ) @ #vk.37 )
+          qed
+        qed
+      next
+        case case_2
+        solve( !Pk( S, pk(x) ) ▶₂ #i )
+          case Register
+          solve( !KU( sign(<'prov', $X.2, tid, v>, ~k) ) @ #vk.15 )
+            case Source_produces
+            solve( !KU( sign(<'root', $X, $X.1, <op, 'any'>, tid>, ~k.1) ) @ #vk.28 )
+              case Human_dynamic_task
+              solve( !KU( sign(<'del', $X.1, A2, <'push', 'any'>, 
+                                h(<<'root', $X, $X.1, <'push', 'any'>, ~tid>, 
+                                   sign(<'root', $X, $X.1, <'push', 'any'>, ~tid>, ~k.1)>)
+                               >,
+                               ~k.2)
+                     ) @ #vk.33 )
+                case Agent1_honest_delegation
+                by contradiction /* from formulas */
+              next
+                case c_sign
+                by solve( !KU( ~k.2 ) @ #vk.37 )
+              qed
+            next
+              case Human_static_task
+              solve( !KU( sign(<'del', $X.1, A2, <'push', 'any'>, 
+                                h(<<'root', $X, $X.1, <'push', 'any'>, ~tid>, 
+                                   sign(<'root', $X, $X.1, <'push', 'any'>, ~tid>, ~k.1)>)
+                               >,
+                               ~k.2)
+                     ) @ #vk.33 )
+                case Agent1_honest_delegation
+                by contradiction /* from formulas */
+              next
+                case c_sign
+                by solve( !KU( ~k.2 ) @ #vk.37 )
+              qed
+            next
+              case c_sign
+              by solve( !KU( ~k.1 ) @ #vk.37 )
+            qed
+          next
+            case c_sign
+            by solve( !KU( ~k ) @ #vk.37 )
+          qed
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma NOESC_action_within_root_caveat:
+  all-traces
+  "∀ R P a tid #i.
+    (Accept( R, P, a, tid ) @ #i) ⇒
+    (∃ H A1 c1 #j.
+      (RootDelegated( H, A1, c1, tid ) @ #j) ∧
+      ((c1 = a) ∨ (∃ op x. (a = <op, x>) ∧ (c1 = <op, 'any'>))))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ R P a tid #i.
+  (Accept( R, P, a, tid ) @ #i)
+ ∧
+  ∀ H A1 c1 #j.
+   (RootDelegated( H, A1, c1, tid ) @ #j)
+  ⇒
+   (¬(c1 = a)) ∧ (∀ op x. (a = <op, x>) ∧ (c1 = <op, 'any'>) ⇒ ⊥)"
+*/
+simplify
+solve( Received( R, P, <op, v>, H, A1, c1, c2, tid ) ▶₀ #i )
+  case Resource_receive_bearer
+  solve( (c1 = <op, v>)  ∥
+         (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c1 = <op.1, 'any'>)) )
+    case case_1
+    solve( (c2 = <op, v>)  ∥
+           (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c2 = <op.1, 'any'>)) )
+      case case_1
+      solve( !Pk( S, pk(x) ) ▶₂ #i )
+        case Register
+        solve( !KU( sign(<'prov', $X.2, tid, v>, ~k) ) @ #vk.17 )
+          case Source_produces
+          solve( !KU( sign(<'root', $X, $X.1, <op, $v>, tid>, ~k.1) ) @ #vk.27 )
+            case Human_dynamic_task
+            by contradiction /* from formulas */
+          next
+            case Human_static_task
+            by contradiction /* from formulas */
+          next
+            case c_sign
+            by solve( !KU( ~k.1 ) @ #vk.35 )
+          qed
+        next
+          case c_sign
+          by solve( !KU( ~k ) @ #vk.35 )
+        qed
+      qed
+    next
+      case case_2
+      solve( !Pk( S, pk(x) ) ▶₂ #i )
+        case Register
+        solve( !KU( sign(<'prov', $X.2, tid, v>, ~k) ) @ #vk.15 )
+          case Source_produces
+          solve( !KU( sign(<'root', $X, $X.1, <op, $v>, tid>, ~k.1) ) @ #vk.25 )
+            case Human_dynamic_task
+            by contradiction /* from formulas */
+          next
+            case Human_static_task
+            by contradiction /* from formulas */
+          next
+            case c_sign
+            by solve( !KU( ~k.1 ) @ #vk.37 )
+          qed
+        next
+          case c_sign
+          by solve( !KU( ~k ) @ #vk.37 )
+        qed
+      qed
+    qed
+  next
+    case case_2
+    solve( (c2 = <op, v>)  ∥
+           (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c2 = <op.1, 'any'>)) )
+      case case_1
+      solve( !Pk( S, pk(x) ) ▶₂ #i )
+        case Register
+        solve( !KU( sign(<'prov', $X.2, tid, v>, ~k) ) @ #vk.17 )
+          case Source_produces
+          solve( !KU( sign(<'root', $X, $X.1, <op, 'any'>, tid>, ~k.1) ) @ #vk.28 )
+            case Human_dynamic_task
+            by contradiction /* from formulas */
+          next
+            case Human_static_task
+            by contradiction /* from formulas */
+          next
+            case c_sign
+            by solve( !KU( ~k.1 ) @ #vk.37 )
+          qed
+        next
+          case c_sign
+          by solve( !KU( ~k ) @ #vk.37 )
+        qed
+      qed
+    next
+      case case_2
+      solve( !Pk( S, pk(x) ) ▶₂ #i )
+        case Register
+        solve( !KU( sign(<'prov', $X.2, tid, v>, ~k) ) @ #vk.15 )
+          case Source_produces
+          solve( !KU( sign(<'root', $X, $X.1, <op, 'any'>, tid>, ~k.1) ) @ #vk.28 )
+            case Human_dynamic_task
+            by contradiction /* from formulas */
+          next
+            case Human_static_task
+            by contradiction /* from formulas */
+          next
+            case c_sign
+            by solve( !KU( ~k.1 ) @ #vk.37 )
+          qed
+        next
+          case c_sign
+          by solve( !KU( ~k ) @ #vk.37 )
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma ATTR_logged_principal_sent_request:
+  all-traces
+  "∀ R P a tid #i.
+    (Accept( R, P, a, tid ) @ #i) ⇒
+    (∃ #j. (Request( P, a, tid ) @ #j) ∧ (#j < #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ R P a tid #i.
+  (Accept( R, P, a, tid ) @ #i)
+ ∧
+  ∀ #j. (Request( P, a, tid ) @ #j) ⇒ ¬(#j < #i)"
+*/
+simplify
+solve( Received( R, P, <op, v>, H, A1, c1, c2, tid ) ▶₀ #i )
+  case Resource_receive_bearer
+  solve( (c1 = <op, v>)  ∥
+         (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c1 = <op.1, 'any'>)) )
+    case case_2
+    solve( (c2 = <op, v>)  ∥
+           (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c2 = <op.1, 'any'>)) )
+      case case_2
+      solve( !Pk( S, pk(x) ) ▶₂ #i )
+        case Register
+        solve( !KU( sign(<'prov', $X.2, tid, v>, ~k) ) @ #vk.15 )
+          case Source_produces
+          solve( !KU( sign(<'root', $X, $X.1, <op, 'any'>, tid>, ~k.1) ) @ #vk.28 )
+            case Human_dynamic_task
+            solve( !KU( sign(<'del', $X.1, P, <'push', 'any'>, 
+                              h(<<'root', $X, $X.1, <'push', 'any'>, ~tid>, 
+                                 sign(<'root', $X, $X.1, <'push', 'any'>, ~tid>, ~k.1)>)
+                             >,
+                             ~k.2)
+                   ) @ #vk.33 )
+              case Agent1_honest_delegation
+              solve( !KU( ~tid ) @ #vk.11 )
+                case Human_dynamic_task_case_1
+                solve( !KU( h(<<'root', $X, $X.1, <'push', 'any'>, ~tid>, 
+                               sign(<'root', $X, $X.1, <'push', 'any'>, ~tid>, ~k.1)>)
+                       ) @ #vk.34 )
+                  case Agent1_honest_delegation
+                  SOLVED // trace found
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma TASK_static_task:
+  all-traces
+  "∀ R P a tid #i #j.
+    ((Accept( R, P, a, tid ) @ #i) ∧ (TaskStatic( tid ) @ #j)) ⇒
+    (∃ H #k. Intends( H, tid, <'fixed', a> ) @ #k)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ R P a tid #i #j.
+  (Accept( R, P, a, tid ) @ #i) ∧ (TaskStatic( tid ) @ #j)
+ ∧
+  ∀ H #k. (Intends( H, tid, <'fixed', a> ) @ #k) ⇒ ⊥"
+*/
+simplify
+solve( Received( R, P, <op, v>, H, A1, c1, c2, ~tid ) ▶₀ #i )
+  case Resource_receive_bearer
+  solve( (c1 = <op, v>)  ∥
+         (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c1 = <op.1, 'any'>)) )
+    case case_2
+    solve( (c2 = <op, v>)  ∥
+           (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c2 = <op.1, 'any'>)) )
+      case case_2
+      solve( !Pk( S, pk(x) ) ▶₂ #i )
+        case Register
+        solve( !Ltk( $H, kH ) ▶₁ #j )
+          case Register
+          solve( !KU( sign(<'prov', $X.2, ~tid, v>, ~k) ) @ #vk.16 )
+            case Source_produces
+            solve( !KU( sign(<'root', $X, $X.1, <op, 'any'>, ~tid>, ~k.2)
+                   ) @ #vk.28 )
+              case Human_static_task
+              solve( !KU( sign(<'del', $A1, P, <'push', 'any'>, 
+                                h(<<'root', $H, $A1, <'push', 'any'>, ~tid>, 
+                                   sign(<'root', $H, $A1, <'push', 'any'>, ~tid>, ~k.1)>)
+                               >,
+                               ~k.2)
+                     ) @ #vk.33 )
+                case Agent1_honest_delegation
+                solve( !KU( ~tid ) @ #vk.11 )
+                  case Human_static_task_case_1
+                  solve( !KU( h(<<'root', $H, $A1, <'push', 'any'>, ~tid>, 
+                                 sign(<'root', $H, $A1, <'push', 'any'>, ~tid>, ~k.1)>)
+                         ) @ #vk.34 )
+                    case Agent1_honest_delegation
+                    SOLVED // trace found
+                  qed
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma TASK_dynamic_task:
+  all-traces
+  "∀ R P op v tid #i #j.
+    ((Accept( R, P, <op, v>, tid ) @ #i) ∧ (TaskDynamic( tid ) @ #j)) ⇒
+    (∃ H S #k #l.
+      (Intends( H, tid, <'hole', op, S> ) @ #k) ∧
+      (Produced( S, tid, v ) @ #l))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ R P op v tid #i #j.
+  (Accept( R, P, <op, v>, tid ) @ #i) ∧ (TaskDynamic( tid ) @ #j)
+ ∧
+  ∀ H S #k #l.
+   (Intends( H, tid, <'hole', op, S> ) @ #k) ∧ (Produced( S, tid, v ) @ #l)
+  ⇒
+   ⊥"
+*/
+simplify
+solve( Received( R, P, <op, v>, H, A1, c1, c2, ~tid ) ▶₀ #i )
+  case Resource_receive_bearer
+  solve( (c1 = <op, v>)  ∥
+         (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c1 = <op.1, 'any'>)) )
+    case case_2
+    solve( (c2 = <op, v>)  ∥
+           (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c2 = <op.1, 'any'>)) )
+      case case_2
+      solve( !Pk( S, pk(x) ) ▶₂ #i )
+        case Register
+        solve( !Ltk( $H, kH ) ▶₁ #j )
+          case Register
+          solve( !KU( sign(<'prov', $X.2, ~tid, v>, ~k) ) @ #vk.16 )
+            case Source_produces
+            solve( !KU( sign(<'root', $X, $X.1, <op, 'any'>, ~tid>, ~k.2)
+                   ) @ #vk.28 )
+              case Human_dynamic_task
+              solve( !KU( sign(<'del', $A1, P, <'push', 'any'>, 
+                                h(<<'root', $H, $A1, <'push', 'any'>, ~tid>, 
+                                   sign(<'root', $H, $A1, <'push', 'any'>, ~tid>, ~k.1)>)
+                               >,
+                               ~k.2)
+                     ) @ #vk.33 )
+                case Agent1_honest_delegation
+                solve( !KU( ~tid ) @ #vk.11 )
+                  case Human_dynamic_task_case_1
+                  solve( !KU( h(<<'root', $H, $A1, <'push', 'any'>, ~tid>, 
+                                 sign(<'root', $H, $A1, <'push', 'any'>, ~tid>, ~k.1)>)
+                         ) @ #vk.34 )
+                    case Agent1_honest_delegation
+                    SOLVED // trace found
+                  qed
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+qed
+
+/* All wellformedness checks were successful. */
+
+/*
+Generated from:
+Tamarin version 1.12.0
+Maude version 3.5.1
+Git revision: 82780bbaf3328a45f624ddb41e51bf75425f851c (with uncommited changes), branch: master
+Compiled at: 2026-03-07 14:22:39.174278293 UTC
+*/
+
+end
+
+==============================================================================
+summary of summaries:
+
+analyzed: AbsChain.spthy
+
+  processing time: 12.44s
+  
+  executable_static_task_conformant (exists-trace): verified (13 steps)
+  executable_dynamic_task_conformant (exists-trace): verified (14 steps)
+  AUTH_every_hop_was_delegated (all-traces): verified (74 steps)
+  NOESC_action_within_root_caveat (all-traces): verified (33 steps)
+  ATTR_logged_principal_sent_request (all-traces): falsified - found trace (11 steps)
+  TASK_static_task (all-traces): falsified - found trace (12 steps)
+  TASK_dynamic_task (all-traces): falsified - found trace (12 steps)
+
+==============================================================================

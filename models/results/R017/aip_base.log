@@ -1,0 +1,1058 @@
+maude tool: 'maude'
+ checking version: 3.5.1. OK.
+ checking installation: OK.
+[Theory AIP] Theory loaded
+[Theory AIP] Theory translated
+[Theory AIP] Theory closed
+[Saturating Sources] Step 1 (Max 5)
+[Saturating Sources] Done
+theory AIP
+
+begin
+
+// Function signature and definition of the equational theory E
+
+functions: fst/1, h/1, pair/2, pk/1, sign/2, snd/1, true/0, verify/3
+equations:
+    fst(<x.1, x.2>) = x.1,
+    snd(<x.1, x.2>) = x.2,
+    verify(sign(x.1, x.2), x.1, pk(x.2)) = true
+
+restriction Equality:
+  "∀ x y #i. (Eq( x, y ) @ #i) ⇒ (x = y)"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ x y #i. (Eq( x, y ) @ #i) ⇒ (x = y)"
+  */
+
+restriction CaveatPermits:
+  "∀ c a #i.
+    (Check( c, a ) @ #i) ⇒
+    ((c = a) ∨ (∃ op x. (a = <op, x>) ∧ (c = <op, 'any'>)))"
+
+  /*
+  expanded formula:
+  "∀ c a #i.
+    (Check( c, a ) @ #i) ⇒
+    ((c = a) ∨ (∃ op x. (a = <op, x>) ∧ (c = <op, 'any'>)))"
+  */
+
+restriction ConcreteOperand:
+  "∀ op #i. (Act( <op, 'any'> ) @ #i) ⇒ (⊥)"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ op #i. (Act( <op, 'any'> ) @ #i) ⇒ (⊥)"
+  */
+
+restriction UniqueKey:
+  "∀ X #i #j. ((Register( X ) @ #i) ∧ (Register( X ) @ #j)) ⇒ (#i = #j)"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ X #i #j. ((Register( X ) @ #i) ∧ (Register( X ) @ #j)) ⇒ (#i = #j)"
+  */
+
+restriction OneValuePerSourceAndTask:
+  "∀ s t v w #i #j.
+    ((Produced( s, t, v ) @ #i) ∧ (Produced( s, t, w ) @ #j)) ⇒ (#i = #j)"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ s t v w #i #j.
+    ((Produced( s, t, v ) @ #i) ∧ (Produced( s, t, w ) @ #j)) ⇒ (#i = #j)"
+  */
+
+restriction ContextNonEmpty:
+  "∀ x #i. (NonEmpty( x ) @ #i) ⇒ (¬(x = 'empty'))"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ x #i. (NonEmpty( x ) @ #i) ⇒ (¬(x = 'empty'))"
+  */
+
+rule (modulo E) Register:
+   [ Fr( ~k ) ]
+  --[ Register( $X ) ]->
+   [ !Ltk( $X, ~k ), !Pk( $X, pk(~k) ), Out( pk(~k) ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Human_static_task:
+   [ Fr( ~tid ), !Ltk( $H, kH ) ]
+  --[
+  Intends( $H, ~tid, <'fixed', 'push', $repo> ),
+  RootDelegated( $H, $A1, <'push', 'any'>, ~tid ), TaskStatic( ~tid )
+  ]->
+   [
+   Out( <<'b0', $H, $A1, <'push', 'any'>, ~tid>, 
+         sign(<'b0', $H, $A1, <'push', 'any'>, ~tid>, kH)>
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Human_dynamic_task:
+   [ Fr( ~tid ), !Ltk( $H, kH ) ]
+  --[
+  Intends( $H, ~tid, <'hole', 'push', $Src> ),
+  RootDelegated( $H, $A1, <'push', 'any'>, ~tid ), TaskDynamic( ~tid )
+  ]->
+   [
+   Out( <<'b0', $H, $A1, <'push', 'any'>, ~tid>, 
+         sign(<'b0', $H, $A1, <'push', 'any'>, ~tid>, kH)>
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Source_produces:
+   [ In( tid ), !Ltk( $Src, ks ) ]
+  --[ Produced( $Src, tid, $v ) ]->
+   [ Out( <<'prov', $Src, tid, $v>, sign(<'prov', $Src, tid, $v>, ks)> ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Agent1_steered_delegation_block:
+   [
+   In( <<'b0', H, $A1, c1, tid>, s0> ), In( <A2, c2, ctx> ), !Pk( H, pkH ),
+   !Ltk( $A1, k1 )
+   ]
+  --[
+  Eq( verify(s0, <'b0', H, $A1, c1, tid>, pkH), true ),
+  Delegated( $A1, A2, c2, tid ), ContextWritten( $A1, tid, ctx )
+  ]->
+   [
+   Out( <<'blk', $A1, A2, c2, ctx, h(<<'b0', H, $A1, c1, tid>, s0>)>, 
+         sign(<'blk', $A1, A2, c2, ctx, h(<<'b0', H, $A1, c1, tid>, s0>)>, k1)>
+   )
+   ]
+
+  /*
+  rule (modulo AC) Agent1_steered_delegation_block:
+     [
+     In( <<'b0', H, $A1, c1, tid>, s0> ), In( <A2, c2, ctx> ), !Pk( H, pkH ),
+     !Ltk( $A1, k1 )
+     ]
+    --[
+    Eq( z, true ), Delegated( $A1, A2, c2, tid ),
+    ContextWritten( $A1, tid, ctx )
+    ]->
+     [
+     Out( <<'blk', $A1, A2, c2, ctx, h(<<'b0', H, $A1, c1, tid>, s0>)>, 
+           sign(<'blk', $A1, A2, c2, ctx, h(<<'b0', H, $A1, c1, tid>, s0>)>, k1)>
+     )
+     ]
+    variants (modulo AC)
+    1. $A1   = $A1.24
+       H     = H.26
+       c1    = c1.27
+       pkH   = pkH.31
+       s0    = s0.32
+       tid   = tid.33
+       z     = verify(s0.32, <'b0', H.26, $A1.24, c1.27, tid.33>, pkH.31)
+    
+    2. $A1   = $A1.35
+       H     = H.37
+       c1    = c1.38
+       pkH   = pk(x.68)
+       s0    = sign(<'b0', H.37, $A1.35, c1.38, tid.44>, x.68)
+       tid   = tid.44
+       z     = true
+  */
+
+rule (modulo E) Agent2_steered_call:
+   [
+   In( <<'b0', H, A1, c1, tid>, s0, 
+        <'blk', A1, $A2, c2, ctx, h(<<'b0', H, A1, c1, tid>, s0>)>, s1>
+   ),
+   In( <$M, a> ), !Pk( H, pkH ), !Pk( A1, pkA1 ), !Ltk( $A2, k2 )
+   ]
+  --[
+  Eq( verify(s0, <'b0', H, A1, c1, tid>, pkH), true ),
+  Eq( verify(s1,
+             <'blk', A1, $A2, c2, ctx, h(<<'b0', H, A1, c1, tid>, s0>)>, pkA1),
+      true
+  ),
+  Request( $A2, a, tid )
+  ]->
+   [
+   Out( <'call', $M, a, <'b0', H, A1, c1, tid>, s0, 
+         <'blk', A1, $A2, c2, ctx, h(<<'b0', H, A1, c1, tid>, s0>)>, s1>
+   )
+   ]
+
+  /*
+  rule (modulo AC) Agent2_steered_call:
+     [
+     In( <<'b0', H, A1, c1, tid>, s0, 
+          <'blk', A1, $A2, c2, ctx, h(<<'b0', H, A1, c1, tid>, s0>)>, s1>
+     ),
+     In( <$M, a> ), !Pk( H, pkH ), !Pk( A1, pkA1 ), !Ltk( $A2, k2 )
+     ]
+    --[ Eq( z, true ), Eq( z.1, true ), Request( $A2, a, tid ) ]->
+     [
+     Out( <'call', $M, a, <'b0', H, A1, c1, tid>, s0, 
+           <'blk', A1, $A2, c2, ctx, h(<<'b0', H, A1, c1, tid>, s0>)>, s1>
+     )
+     ]
+    variants (modulo AC)
+    1. $A2   = $A2.34
+       A1    = A1.36
+       H     = H.37
+       c1    = c1.39
+       c2    = c2.40
+       ctx   = ctx.41
+       pkA1  = pkA1.43
+       pkH   = pkH.44
+       s0    = s0.45
+       s1    = s1.46
+       tid   = tid.47
+       z     = verify(s0.45, <'b0', H.37, A1.36, c1.39, tid.47>, pkH.44)
+       z.1   = verify(s1.46,
+                      <'blk', A1.36, $A2.34, c2.40, ctx.41, 
+                       h(<<'b0', H.37, A1.36, c1.39, tid.47>, s0.45>)>,
+                      pkA1.43)
+    
+    2. $A2   = $A2.67
+       A1    = A1.69
+       H     = H.70
+       c1    = c1.72
+       c2    = c2.73
+       ctx   = ctx.74
+       pkA1  = pkA1.76
+       pkH   = pk(x.132)
+       s0    = sign(<'b0', H.70, A1.69, c1.72, tid.80>, x.132)
+       s1    = s1.79
+       tid   = tid.80
+       z     = true
+       z.1   = verify(s1.79,
+                      <'blk', A1.69, $A2.67, c2.73, ctx.74, 
+                       h(<<'b0', H.70, A1.69, c1.72, tid.80>, 
+                          sign(<'b0', H.70, A1.69, c1.72, tid.80>, x.132)>)
+                      >,
+                      pkA1.76)
+    
+    3. $A2   = $A2.68
+       A1    = A1.70
+       H     = H.71
+       c1    = c1.73
+       c2    = c2.74
+       ctx   = ctx.75
+       pkA1  = pk(x.134)
+       pkH   = pkH.78
+       s0    = s0.79
+       s1    = sign(<'blk', A1.70, $A2.68, c2.74, ctx.75, 
+                     h(<<'b0', H.71, A1.70, c1.73, tid.81>, s0.79>)>,
+                    x.134)
+       tid   = tid.81
+       z     = verify(s0.79, <'b0', H.71, A1.70, c1.73, tid.81>, pkH.78)
+       z.1   = true
+    
+    4. $A2   = $A2.69
+       A1    = A1.71
+       H     = H.72
+       c1    = c1.74
+       c2    = c2.75
+       ctx   = ctx.76
+       pkA1  = pk(x.135)
+       pkH   = pk(x.136)
+       s0    = sign(<'b0', H.72, A1.71, c1.74, tid.82>, x.136)
+       s1    = sign(<'blk', A1.71, $A2.69, c2.75, ctx.76, 
+                     h(<<'b0', H.72, A1.71, c1.74, tid.82>, 
+                        sign(<'b0', H.72, A1.71, c1.74, tid.82>, x.136)>)
+                    >,
+                    x.135)
+       tid   = tid.82
+       z     = true
+       z.1   = true
+  */
+
+rule (modulo E) Server_accepts_tool_call:
+   [
+   In( <'call', $M, a, <'b0', H, A1, c1, tid>, s0, 
+        <'blk', A1, A2, c2, ctx, h(<<'b0', H, A1, c1, tid>, s0>)>, s1>
+   ),
+   !Pk( H, pkH ), !Pk( A1, pkA1 )
+   ]
+  --[
+  Eq( verify(s0, <'b0', H, A1, c1, tid>, pkH), true ),
+  Eq( verify(s1, <'blk', A1, A2, c2, ctx, h(<<'b0', H, A1, c1, tid>, s0>)>,
+             pkA1),
+      true
+  ),
+  NonEmpty( ctx ), Check( c1, a ), Check( c2, a ), Act( a ),
+  Accept( $M, A2, a, tid ), Chain( $M, H, A1, c1, A2, c2, tid ),
+  AuditContext( $M, tid, ctx )
+  ]->
+   [ ]
+
+  /*
+  rule (modulo AC) Server_accepts_tool_call:
+     [
+     In( <'call', $M, a, <'b0', H, A1, c1, tid>, s0, 
+          <'blk', A1, A2, c2, ctx, h(<<'b0', H, A1, c1, tid>, s0>)>, s1>
+     ),
+     !Pk( H, pkH ), !Pk( A1, pkA1 )
+     ]
+    --[
+    Eq( z, true ), Eq( z.1, true ), NonEmpty( ctx ), Check( c1, a ),
+    Check( c2, a ), Act( a ), Accept( $M, A2, a, tid ),
+    Chain( $M, H, A1, c1, A2, c2, tid ), AuditContext( $M, tid, ctx )
+    ]->
+     [ ]
+    variants (modulo AC)
+    1. A1    = A1.31
+       A2    = A2.32
+       H     = H.33
+       c1    = c1.35
+       c2    = c2.36
+       ctx   = ctx.37
+       pkA1  = pkA1.38
+       pkH   = pkH.39
+       s0    = s0.40
+       s1    = s1.41
+       tid   = tid.42
+       z     = verify(s0.40, <'b0', H.33, A1.31, c1.35, tid.42>, pkH.39)
+       z.1   = verify(s1.41,
+                      <'blk', A1.31, A2.32, c2.36, ctx.37, 
+                       h(<<'b0', H.33, A1.31, c1.35, tid.42>, s0.40>)>,
+                      pkA1.38)
+    
+    2. A1    = A1.61
+       A2    = A2.62
+       H     = H.63
+       c1    = c1.65
+       c2    = c2.66
+       ctx   = ctx.67
+       pkA1  = pk(x.119)
+       pkH   = pkH.69
+       s0    = s0.70
+       s1    = sign(<'blk', A1.61, A2.62, c2.66, ctx.67, 
+                     h(<<'b0', H.63, A1.61, c1.65, tid.72>, s0.70>)>,
+                    x.119)
+       tid   = tid.72
+       z     = verify(s0.70, <'b0', H.63, A1.61, c1.65, tid.72>, pkH.69)
+       z.1   = true
+    
+    3. A1    = A1.62
+       A2    = A2.63
+       H     = H.64
+       c1    = c1.66
+       c2    = c2.67
+       ctx   = ctx.68
+       pkA1  = pkA1.69
+       pkH   = pk(x.121)
+       s0    = sign(<'b0', H.64, A1.62, c1.66, tid.73>, x.121)
+       s1    = s1.72
+       tid   = tid.73
+       z     = true
+       z.1   = verify(s1.72,
+                      <'blk', A1.62, A2.63, c2.67, ctx.68, 
+                       h(<<'b0', H.64, A1.62, c1.66, tid.73>, 
+                          sign(<'b0', H.64, A1.62, c1.66, tid.73>, x.121)>)
+                      >,
+                      pkA1.69)
+    
+    4. A1    = A1.62
+       A2    = A2.63
+       H     = H.64
+       c1    = c1.66
+       c2    = c2.67
+       ctx   = ctx.68
+       pkA1  = pk(x.120)
+       pkH   = pk(x.121)
+       s0    = sign(<'b0', H.64, A1.62, c1.66, tid.73>, x.121)
+       s1    = sign(<'blk', A1.62, A2.63, c2.67, ctx.68, 
+                     h(<<'b0', H.64, A1.62, c1.66, tid.73>, 
+                        sign(<'b0', H.64, A1.62, c1.66, tid.73>, x.121)>)
+                    >,
+                    x.120)
+       tid   = tid.73
+       z     = true
+       z.1   = true
+  */
+
+lemma executable_static_task_conformant:
+  exists-trace
+  "∃ M P a tid H #i #j #k.
+    ((Accept( M, P, a, tid ) @ #i) ∧ (TaskStatic( tid ) @ #j)) ∧
+    (Intends( H, tid, <'fixed', a> ) @ #k)"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ M P a tid H #i #j #k.
+  (Accept( M, P, a, tid ) @ #i) ∧
+  (TaskStatic( tid ) @ #j) ∧
+  (Intends( H, tid, <'fixed', a> ) @ #k)"
+*/
+simplify
+solve( (c1 = a)  ∥ (∃ op x. (a = <op, x>) ∧ (c1 = <op, 'any'>)) )
+  case case_2
+  solve( (c2 = <op, x>)  ∥
+         (∃ op.1 x.1. (<op, x> = <op.1, x.1>) ∧ (c2 = <op.1, 'any'>)) )
+    case case_1
+    solve( !Pk( H, pk(x.1) ) ▶₁ #i )
+      case Register
+      solve( !Pk( A1, pk(x.1) ) ▶₂ #i )
+        case Register
+        solve( !Ltk( $H, kH ) ▶₁ #j )
+          case Register
+          solve( Intends( H.1, ~tid, <'fixed', op, x> ) @ #k.3 )
+            case Human_static_task
+            solve( !KU( sign(<'b0', $X, $X.1, <'push', 'any'>, ~tid>, ~k)
+                   ) @ #vk.22 )
+              case Human_static_task
+              solve( !KU( sign(<'blk', $A1, P, <'push', $repo>, ctx, 
+                                h(<<'b0', $H, $A1, <'push', 'any'>, ~tid>, 
+                                   sign(<'b0', $H, $A1, <'push', 'any'>, ~tid>, ~k)>)
+                               >,
+                               ~k.1)
+                     ) @ #vk.28 )
+                case Agent1_steered_delegation_block
+                solve( !KU( ~tid ) @ #vk.25 )
+                  case Human_static_task
+                  solve( !KU( h(<<'b0', $H, $A1, <'push', 'any'>, ~tid>, 
+                                 sign(<'b0', $H, $A1, <'push', 'any'>, ~tid>, ~k)>)
+                         ) @ #vk.31 )
+                    case Agent1_steered_delegation_block
+                    SOLVED // trace found
+                  qed
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma executable_dynamic_task_conformant:
+  exists-trace
+  "∃ M P op v tid H S #i #j #k.
+    ((Accept( M, P, <op, v>, tid ) @ #i) ∧
+     (Intends( H, tid, <'hole', op, S> ) @ #j)) ∧
+    (Produced( S, tid, v ) @ #k)"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ M P op v tid H S #i #j #k.
+  (Accept( M, P, <op, v>, tid ) @ #i) ∧
+  (Intends( H, tid, <'hole', op, S> ) @ #j) ∧
+  (Produced( S, tid, v ) @ #k)"
+*/
+simplify
+solve( (c1 = <op, $v>)  ∥
+       (∃ op.1 x. (<op, $v> = <op.1, x>) ∧ (c1 = <op.1, 'any'>)) )
+  case case_2
+  solve( (c2 = <op, $v>)  ∥
+         (∃ op.1 x. (<op, $v> = <op.1, x>) ∧ (c2 = <op.1, 'any'>)) )
+    case case_1
+    solve( !Pk( H, pk(x) ) ▶₁ #i )
+      case Register
+      solve( !Pk( A1, pk(x) ) ▶₂ #i )
+        case Register
+        solve( !Ltk( $Src, ks ) ▶₁ #k.2 )
+          case Register
+          solve( Intends( H, tid, <'hole', op, $Src> ) @ #j )
+            case Human_dynamic_task
+            solve( !Ltk( $H, kH ) ▶₁ #j )
+              case Register
+              solve( !KU( sign(<'b0', $X, $X.1, <'push', 'any'>, ~tid>, ~k)
+                     ) @ #vk.22 )
+                case Human_dynamic_task
+                solve( !KU( sign(<'blk', $A1, P, <'push', $v>, ctx, 
+                                  h(<<'b0', $H, $A1, <'push', 'any'>, ~tid>, 
+                                     sign(<'b0', $H, $A1, <'push', 'any'>, ~tid>, ~k)>)
+                                 >,
+                                 ~k.1)
+                       ) @ #vk.28 )
+                  case Agent1_steered_delegation_block
+                  solve( !KU( ~tid ) @ #vk.25 )
+                    case Human_dynamic_task
+                    solve( !KU( h(<<'b0', $H, $A1, <'push', 'any'>, ~tid>, 
+                                   sign(<'b0', $H, $A1, <'push', 'any'>, ~tid>, ~k)>)
+                           ) @ #vk.31 )
+                      case Agent1_steered_delegation_block
+                      SOLVED // trace found
+                    qed
+                  qed
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma witness_context_laundering:
+  exists-trace
+  "∃ M P a b tid H #i #k.
+    (((Accept( M, P, a, tid ) @ #i) ∧
+      (AuditContext( M, tid, <'fixed', b> ) @ #i)) ∧
+     (Intends( H, tid, <'fixed', b> ) @ #k)) ∧
+    (¬(a = b))"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ M P a b tid H #i #k.
+  (Accept( M, P, a, tid ) @ #i) ∧
+  (AuditContext( M, tid, <'fixed', b> ) @ #i) ∧
+  (Intends( H, tid, <'fixed', b> ) @ #k)
+ ∧
+  ¬(a = b)"
+*/
+simplify
+solve( (c1 = a)  ∥ (∃ op x. (a = <op, x>) ∧ (c1 = <op, 'any'>)) )
+  case case_2
+  solve( (c2 = <op, x>)  ∥
+         (∃ op.1 x.1. (<op, x> = <op.1, x.1>) ∧ (c2 = <op.1, 'any'>)) )
+    case case_1
+    solve( !Pk( H, pk(x.1) ) ▶₁ #i )
+      case Register
+      solve( !Pk( A1, pk(x.1) ) ▶₂ #i )
+        case Register
+        solve( Intends( H, tid, <'fixed', b> ) @ #k.2 )
+          case Human_static_task
+          solve( !Ltk( $H, kH ) ▶₁ #k.2 )
+            case Register
+            solve( !KU( sign(<'b0', $X, $X.1, <op, 'any'>, ~tid>, ~k) ) @ #vk.22 )
+              case Human_static_task
+              solve( !KU( sign(<'blk', $A1, P, <'push', x>, <'fixed', 'push', $repo>, 
+                                h(<<'b0', $H, $A1, <'push', 'any'>, ~tid>, 
+                                   sign(<'b0', $H, $A1, <'push', 'any'>, ~tid>, ~k)>)
+                               >,
+                               ~k.1)
+                     ) @ #vk.28 )
+                case Agent1_steered_delegation_block
+                solve( !KU( ~tid ) @ #vk.25 )
+                  case Human_static_task
+                  solve( !KU( h(<<'b0', $H, $A1, <'push', 'any'>, ~tid>, 
+                                 sign(<'b0', $H, $A1, <'push', 'any'>, ~tid>, ~k)>)
+                         ) @ #vk.31 )
+                    case Agent1_steered_delegation_block
+                    SOLVED // trace found
+                  qed
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma AUTH_every_hop_was_delegated:
+  all-traces
+  "∀ M H A1 c1 A2 c2 tid #i.
+    (Chain( M, H, A1, c1, A2, c2, tid ) @ #i) ⇒
+    ((∃ #j. (RootDelegated( H, A1, c1, tid ) @ #j) ∧ (#j < #i)) ∧
+     (∃ #k. (Delegated( A1, A2, c2, tid ) @ #k) ∧ (#k < #i)))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ M H A1 c1 A2 c2 tid #i.
+  (Chain( M, H, A1, c1, A2, c2, tid ) @ #i)
+ ∧
+  ((∀ #j. (RootDelegated( H, A1, c1, tid ) @ #j) ⇒ ¬(#j < #i)) ∨
+   (∀ #k. (Delegated( A1, A2, c2, tid ) @ #k) ⇒ ¬(#k < #i)))"
+*/
+simplify
+solve( (∀ #j. (RootDelegated( H, A1, c1, tid ) @ #j) ⇒ ¬(#j < #i))  ∥
+       (∀ #k. (Delegated( A1, A2, c2, tid ) @ #k) ⇒ ¬(#k < #i)) )
+  case case_1
+  solve( (c1 = a)  ∥ (∃ op x. (a = <op, x>) ∧ (c1 = <op, 'any'>)) )
+    case case_1
+    solve( (c2 = a)  ∥ (∃ op x. (a = <op, x>) ∧ (c2 = <op, 'any'>)) )
+      case case_1
+      solve( !Pk( H, pk(x) ) ▶₁ #i )
+        case Register
+        solve( !Pk( A1, pk(x) ) ▶₂ #i )
+          case Register
+          solve( !KU( sign(<'b0', $X, $X.1, a, tid>, ~k) ) @ #vk.21 )
+            case Human_dynamic_task
+            by contradiction /* from formulas */
+          next
+            case Human_static_task
+            by contradiction /* from formulas */
+          next
+            case c_sign
+            by solve( !KU( ~k ) @ #vk.28 )
+          qed
+        qed
+      qed
+    next
+      case case_2
+      solve( !Pk( H, pk(x.1) ) ▶₁ #i )
+        case Register
+        solve( !Pk( A1, pk(x.1) ) ▶₂ #i )
+          case Register
+          solve( !KU( sign(<'b0', $X, $X.1, <op, x>, tid>, ~k) ) @ #vk.19 )
+            case Human_dynamic_task
+            by contradiction /* from formulas */
+          next
+            case Human_static_task
+            by contradiction /* from formulas */
+          next
+            case c_sign
+            by solve( !KU( ~k ) @ #vk.32 )
+          qed
+        qed
+      qed
+    qed
+  next
+    case case_2
+    solve( (c2 = <op, x>)  ∥
+           (∃ op.1 x.1. (<op, x> = <op.1, x.1>) ∧ (c2 = <op.1, 'any'>)) )
+      case case_1
+      solve( !Pk( H, pk(x.1) ) ▶₁ #i )
+        case Register
+        solve( !Pk( A1, pk(x.1) ) ▶₂ #i )
+          case Register
+          solve( !KU( sign(<'b0', $X, $X.1, <op, 'any'>, tid>, ~k) ) @ #vk.22 )
+            case Human_dynamic_task
+            by contradiction /* from formulas */
+          next
+            case Human_static_task
+            by contradiction /* from formulas */
+          next
+            case c_sign
+            by solve( !KU( ~k ) @ #vk.32 )
+          qed
+        qed
+      qed
+    next
+      case case_2
+      solve( !Pk( H, pk(x.1) ) ▶₁ #i )
+        case Register
+        solve( !Pk( A1, pk(x.1) ) ▶₂ #i )
+          case Register
+          solve( !KU( sign(<'b0', $X, $X.1, <op, 'any'>, tid>, ~k) ) @ #vk.22 )
+            case Human_dynamic_task
+            by contradiction /* from formulas */
+          next
+            case Human_static_task
+            by contradiction /* from formulas */
+          next
+            case c_sign
+            by solve( !KU( ~k ) @ #vk.32 )
+          qed
+        qed
+      qed
+    qed
+  qed
+next
+  case case_2
+  solve( (c1 = a)  ∥ (∃ op x. (a = <op, x>) ∧ (c1 = <op, 'any'>)) )
+    case case_1
+    solve( (c2 = a)  ∥ (∃ op x. (a = <op, x>) ∧ (c2 = <op, 'any'>)) )
+      case case_1
+      solve( !Pk( H, pk(x) ) ▶₁ #i )
+        case Register
+        solve( !Pk( A1, pk(x) ) ▶₂ #i )
+          case Register
+          solve( !KU( sign(<'b0', $X, $X.1, a, tid>, ~k) ) @ #vk.21 )
+            case Human_dynamic_task
+            by contradiction /* from formulas */
+          next
+            case Human_static_task
+            by contradiction /* from formulas */
+          next
+            case c_sign
+            by solve( !KU( ~k ) @ #vk.28 )
+          qed
+        qed
+      qed
+    next
+      case case_2
+      solve( !Pk( H, pk(x.1) ) ▶₁ #i )
+        case Register
+        solve( !Pk( A1, pk(x.1) ) ▶₂ #i )
+          case Register
+          solve( !KU( sign(<'b0', $X, $X.1, <op, x>, tid>, ~k) ) @ #vk.19 )
+            case Human_dynamic_task
+            by contradiction /* from formulas */
+          next
+            case Human_static_task
+            by contradiction /* from formulas */
+          next
+            case c_sign
+            by solve( !KU( ~k ) @ #vk.32 )
+          qed
+        qed
+      qed
+    qed
+  next
+    case case_2
+    solve( (c2 = <op, x>)  ∥
+           (∃ op.1 x.1. (<op, x> = <op.1, x.1>) ∧ (c2 = <op.1, 'any'>)) )
+      case case_1
+      solve( !Pk( H, pk(x.1) ) ▶₁ #i )
+        case Register
+        solve( !Pk( A1, pk(x.1) ) ▶₂ #i )
+          case Register
+          solve( !KU( sign(<'b0', $X, $X.1, <op, 'any'>, tid>, ~k) ) @ #vk.22 )
+            case Human_dynamic_task
+            solve( !KU( sign(<'blk', $X.1, A2, <'push', x>, ctx, 
+                              h(<<'b0', $X, $X.1, <'push', 'any'>, ~tid>, 
+                                 sign(<'b0', $X, $X.1, <'push', 'any'>, ~tid>, ~k)>)
+                             >,
+                             ~k.1)
+                   ) @ #vk.28 )
+              case Agent1_steered_delegation_block
+              by contradiction /* from formulas */
+            next
+              case c_sign
+              by solve( !KU( ~k.1 ) @ #vk.32 )
+            qed
+          next
+            case Human_static_task
+            solve( !KU( sign(<'blk', $X.1, A2, <'push', x>, ctx, 
+                              h(<<'b0', $X, $X.1, <'push', 'any'>, ~tid>, 
+                                 sign(<'b0', $X, $X.1, <'push', 'any'>, ~tid>, ~k)>)
+                             >,
+                             ~k.1)
+                   ) @ #vk.28 )
+              case Agent1_steered_delegation_block
+              by contradiction /* from formulas */
+            next
+              case c_sign
+              by solve( !KU( ~k.1 ) @ #vk.32 )
+            qed
+          next
+            case c_sign
+            by solve( !KU( ~k ) @ #vk.32 )
+          qed
+        qed
+      qed
+    next
+      case case_2
+      solve( !Pk( H, pk(x.1) ) ▶₁ #i )
+        case Register
+        solve( !Pk( A1, pk(x.1) ) ▶₂ #i )
+          case Register
+          solve( !KU( sign(<'b0', $X, $X.1, <op, 'any'>, tid>, ~k) ) @ #vk.22 )
+            case Human_dynamic_task
+            solve( !KU( sign(<'blk', $X.1, A2, <'push', 'any'>, ctx, 
+                              h(<<'b0', $X, $X.1, <'push', 'any'>, ~tid>, 
+                                 sign(<'b0', $X, $X.1, <'push', 'any'>, ~tid>, ~k)>)
+                             >,
+                             ~k.1)
+                   ) @ #vk.28 )
+              case Agent1_steered_delegation_block
+              by contradiction /* from formulas */
+            next
+              case c_sign
+              by solve( !KU( ~k.1 ) @ #vk.32 )
+            qed
+          next
+            case Human_static_task
+            solve( !KU( sign(<'blk', $X.1, A2, <'push', 'any'>, ctx, 
+                              h(<<'b0', $X, $X.1, <'push', 'any'>, ~tid>, 
+                                 sign(<'b0', $X, $X.1, <'push', 'any'>, ~tid>, ~k)>)
+                             >,
+                             ~k.1)
+                   ) @ #vk.28 )
+              case Agent1_steered_delegation_block
+              by contradiction /* from formulas */
+            next
+              case c_sign
+              by solve( !KU( ~k.1 ) @ #vk.32 )
+            qed
+          next
+            case c_sign
+            by solve( !KU( ~k ) @ #vk.32 )
+          qed
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma NOESC_action_within_root_caveat:
+  all-traces
+  "∀ M P a tid #i.
+    (Accept( M, P, a, tid ) @ #i) ⇒
+    (∃ H A1 c1 #j.
+      (RootDelegated( H, A1, c1, tid ) @ #j) ∧
+      ((c1 = a) ∨ (∃ op x. (a = <op, x>) ∧ (c1 = <op, 'any'>))))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ M P a tid #i.
+  (Accept( M, P, a, tid ) @ #i)
+ ∧
+  ∀ H A1 c1 #j.
+   (RootDelegated( H, A1, c1, tid ) @ #j)
+  ⇒
+   (¬(c1 = a)) ∧ (∀ op x. (a = <op, x>) ∧ (c1 = <op, 'any'>) ⇒ ⊥)"
+*/
+simplify
+solve( (c1 = a)  ∥ (∃ op x. (a = <op, x>) ∧ (c1 = <op, 'any'>)) )
+  case case_1
+  solve( (c2 = a)  ∥ (∃ op x. (a = <op, x>) ∧ (c2 = <op, 'any'>)) )
+    case case_1
+    solve( !Pk( H, pk(x) ) ▶₁ #i )
+      case Register
+      solve( !Pk( A1, pk(x) ) ▶₂ #i )
+        case Register
+        solve( !KU( sign(<'b0', $X, $X.1, a, tid>, ~k) ) @ #vk.21 )
+          case Human_dynamic_task
+          by contradiction /* from formulas */
+        next
+          case Human_static_task
+          by contradiction /* from formulas */
+        next
+          case c_sign
+          by solve( !KU( ~k ) @ #vk.28 )
+        qed
+      qed
+    qed
+  next
+    case case_2
+    solve( !Pk( H, pk(x.1) ) ▶₁ #i )
+      case Register
+      solve( !Pk( A1, pk(x.1) ) ▶₂ #i )
+        case Register
+        solve( !KU( sign(<'b0', $X, $X.1, <op, x>, tid>, ~k) ) @ #vk.19 )
+          case Human_dynamic_task
+          by contradiction /* from formulas */
+        next
+          case Human_static_task
+          by contradiction /* from formulas */
+        next
+          case c_sign
+          by solve( !KU( ~k ) @ #vk.32 )
+        qed
+      qed
+    qed
+  qed
+next
+  case case_2
+  solve( (c2 = <op, x>)  ∥
+         (∃ op.1 x.1. (<op, x> = <op.1, x.1>) ∧ (c2 = <op.1, 'any'>)) )
+    case case_1
+    solve( !Pk( H, pk(x.1) ) ▶₁ #i )
+      case Register
+      solve( !Pk( A1, pk(x.1) ) ▶₂ #i )
+        case Register
+        solve( !KU( sign(<'b0', $X, $X.1, <op, 'any'>, tid>, ~k) ) @ #vk.22 )
+          case Human_dynamic_task
+          by contradiction /* from formulas */
+        next
+          case Human_static_task
+          by contradiction /* from formulas */
+        next
+          case c_sign
+          by solve( !KU( ~k ) @ #vk.32 )
+        qed
+      qed
+    qed
+  next
+    case case_2
+    solve( !Pk( H, pk(x.1) ) ▶₁ #i )
+      case Register
+      solve( !Pk( A1, pk(x.1) ) ▶₂ #i )
+        case Register
+        solve( !KU( sign(<'b0', $X, $X.1, <op, 'any'>, tid>, ~k) ) @ #vk.22 )
+          case Human_dynamic_task
+          by contradiction /* from formulas */
+        next
+          case Human_static_task
+          by contradiction /* from formulas */
+        next
+          case c_sign
+          by solve( !KU( ~k ) @ #vk.32 )
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma ATTR_logged_principal_sent_request:
+  all-traces
+  "∀ M P a tid #i.
+    (Accept( M, P, a, tid ) @ #i) ⇒
+    (∃ #j. (Request( P, a, tid ) @ #j) ∧ (#j < #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ M P a tid #i.
+  (Accept( M, P, a, tid ) @ #i)
+ ∧
+  ∀ #j. (Request( P, a, tid ) @ #j) ⇒ ¬(#j < #i)"
+*/
+simplify
+solve( (c1 = a)  ∥ (∃ op x. (a = <op, x>) ∧ (c1 = <op, 'any'>)) )
+  case case_2
+  solve( (c2 = <op, x>)  ∥
+         (∃ op.1 x.1. (<op, x> = <op.1, x.1>) ∧ (c2 = <op.1, 'any'>)) )
+    case case_1
+    solve( !Pk( H, pk(x.1) ) ▶₁ #i )
+      case Register
+      solve( !Pk( A1, pk(x.1) ) ▶₂ #i )
+        case Register
+        solve( !KU( sign(<'b0', $X, $X.1, <op, 'any'>, tid>, ~k) ) @ #vk.22 )
+          case Human_dynamic_task
+          solve( !KU( sign(<'blk', $X.1, P, <'push', x>, ctx, 
+                            h(<<'b0', $X, $X.1, <'push', 'any'>, ~tid>, 
+                               sign(<'b0', $X, $X.1, <'push', 'any'>, ~tid>, ~k)>)
+                           >,
+                           ~k.1)
+                 ) @ #vk.28 )
+            case Agent1_steered_delegation_block
+            solve( !KU( ~tid ) @ #vk.25 )
+              case Human_dynamic_task
+              solve( !KU( h(<<'b0', $X, $X.1, <'push', 'any'>, ~tid>, 
+                             sign(<'b0', $X, $X.1, <'push', 'any'>, ~tid>, ~k)>)
+                     ) @ #vk.31 )
+                case Agent1_steered_delegation_block
+                SOLVED // trace found
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma TASK_static_task:
+  all-traces
+  "∀ M P a tid #i #j.
+    ((Accept( M, P, a, tid ) @ #i) ∧ (TaskStatic( tid ) @ #j)) ⇒
+    (∃ H #k. Intends( H, tid, <'fixed', a> ) @ #k)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ M P a tid #i #j.
+  (Accept( M, P, a, tid ) @ #i) ∧ (TaskStatic( tid ) @ #j)
+ ∧
+  ∀ H #k. (Intends( H, tid, <'fixed', a> ) @ #k) ⇒ ⊥"
+*/
+simplify
+solve( (c1 = a)  ∥ (∃ op x. (a = <op, x>) ∧ (c1 = <op, 'any'>)) )
+  case case_2
+  solve( (c2 = <op, x>)  ∥
+         (∃ op.1 x.1. (<op, x> = <op.1, x.1>) ∧ (c2 = <op.1, 'any'>)) )
+    case case_1
+    solve( !Pk( H, pk(x.1) ) ▶₁ #i )
+      case Register
+      solve( !Pk( A1, pk(x.1) ) ▶₂ #i )
+        case Register
+        solve( !Ltk( $H, kH ) ▶₁ #j )
+          case Register
+          solve( !KU( sign(<'b0', $X, $X.1, <op, 'any'>, ~tid>, ~k) ) @ #vk.22 )
+            case Human_static_task
+            solve( !KU( sign(<'blk', $A1, P, <'push', x>, ctx, 
+                              h(<<'b0', $H, $A1, <'push', 'any'>, ~tid>, 
+                                 sign(<'b0', $H, $A1, <'push', 'any'>, ~tid>, ~k)>)
+                             >,
+                             ~k.1)
+                   ) @ #vk.28 )
+              case Agent1_steered_delegation_block
+              solve( !KU( ~tid ) @ #vk.25 )
+                case Human_static_task
+                solve( !KU( h(<<'b0', $H, $A1, <'push', 'any'>, ~tid>, 
+                               sign(<'b0', $H, $A1, <'push', 'any'>, ~tid>, ~k)>)
+                       ) @ #vk.31 )
+                  case Agent1_steered_delegation_block
+                  SOLVED // trace found
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma TASK_dynamic_task:
+  all-traces
+  "∀ M P op v tid #i #j.
+    ((Accept( M, P, <op, v>, tid ) @ #i) ∧ (TaskDynamic( tid ) @ #j)) ⇒
+    (∃ H S #k #l.
+      (Intends( H, tid, <'hole', op, S> ) @ #k) ∧
+      (Produced( S, tid, v ) @ #l))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ M P op v tid #i #j.
+  (Accept( M, P, <op, v>, tid ) @ #i) ∧ (TaskDynamic( tid ) @ #j)
+ ∧
+  ∀ H S #k #l.
+   (Intends( H, tid, <'hole', op, S> ) @ #k) ∧ (Produced( S, tid, v ) @ #l)
+  ⇒
+   ⊥"
+*/
+simplify
+solve( (c1 = <op, v>)  ∥
+       (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c1 = <op.1, 'any'>)) )
+  case case_2
+  solve( (c2 = <op, v>)  ∥
+         (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (c2 = <op.1, 'any'>)) )
+    case case_1
+    solve( !Pk( H, pk(x) ) ▶₁ #i )
+      case Register
+      solve( !Pk( A1, pk(x) ) ▶₂ #i )
+        case Register
+        solve( !Ltk( $H, kH ) ▶₁ #j )
+          case Register
+          solve( !KU( sign(<'b0', $X, $X.1, <op, 'any'>, ~tid>, ~k) ) @ #vk.22 )
+            case Human_dynamic_task
+            solve( !KU( sign(<'blk', $A1, P, <'push', v>, ctx, 
+                              h(<<'b0', $H, $A1, <'push', 'any'>, ~tid>, 
+                                 sign(<'b0', $H, $A1, <'push', 'any'>, ~tid>, ~k)>)
+                             >,
+                             ~k.1)
+                   ) @ #vk.28 )
+              case Agent1_steered_delegation_block
+              solve( !KU( ~tid ) @ #vk.25 )
+                case Human_dynamic_task
+                solve( !KU( h(<<'b0', $H, $A1, <'push', 'any'>, ~tid>, 
+                               sign(<'b0', $H, $A1, <'push', 'any'>, ~tid>, ~k)>)
+                       ) @ #vk.31 )
+                  case Agent1_steered_delegation_block
+                  SOLVED // trace found
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+qed
+
+/* All wellformedness checks were successful. */
+
+/*
+Generated from:
+Tamarin version 1.12.0
+Maude version 3.5.1
+Git revision: 82780bbaf3328a45f624ddb41e51bf75425f851c (with uncommited changes), branch: master
+Compiled at: 2026-03-07 14:22:39.174278293 UTC
+*/
+
+end
+
+==============================================================================
+summary of summaries:
+
+analyzed: AIP.spthy
+
+  processing time: 13.55s
+  
+  executable_static_task_conformant (exists-trace): verified (12 steps)
+  executable_dynamic_task_conformant (exists-trace): verified (13 steps)
+  witness_context_laundering (exists-trace): verified (12 steps)
+  AUTH_every_hop_was_delegated (all-traces): verified (64 steps)
+  NOESC_action_within_root_caveat (all-traces): verified (28 steps)
+  ATTR_logged_principal_sent_request (all-traces): falsified - found trace (10 steps)
+  TASK_static_task (all-traces): falsified - found trace (11 steps)
+  TASK_dynamic_task (all-traces): falsified - found trace (11 steps)
+
+==============================================================================

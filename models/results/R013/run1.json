@@ -1,0 +1,112 @@
+[
+  {
+    "id": "T0",
+    "claims": {
+      "exp": 1791776753,
+      "iat": 1791776453,
+      "jti": "onrtro:2dd5b6c5-9ff8-924e-d97b-a813ac1c7204",
+      "iss": "http://127.0.0.1:18080/realms/r013",
+      "typ": "Bearer",
+      "azp": "agent-a1",
+      "sid": "oGiQSy_Kxf8i4ot9RDc1wXJw",
+      "scope": "repo:push profile",
+      "name": "Alice Human",
+      "preferred_username": "alice",
+      "given_name": "Alice",
+      "family_name": "Human"
+    }
+  },
+  {
+    "id": "K1",
+    "status": 403,
+    "body": {
+      "error": "access_denied",
+      "error_description": "Client is not within the token audience"
+    },
+    "issued": null
+  },
+  {
+    "id": "T0b",
+    "claims": {
+      "exp": 1791776753,
+      "iat": 1791776453,
+      "jti": "onrtro:67761540-02ba-864f-2008-705269f73e14",
+      "iss": "http://127.0.0.1:18080/realms/r013",
+      "aud": "agent-a2",
+      "typ": "Bearer",
+      "azp": "agent-a1",
+      "sid": "Qlc6XBfpcqPxnOZJ6aEJ7cwe",
+      "scope": "repo:push profile",
+      "name": "Alice Human",
+      "preferred_username": "alice",
+      "given_name": "Alice",
+      "family_name": "Human"
+    }
+  },
+  {
+    "id": "K2",
+    "status": 200,
+    "body": {
+      "issued": {
+        "exp": 1791776753,
+        "iat": 1791776453,
+        "jti": "ntrtte:30417db2-170b-e721-5dbf-3b3193074e36",
+        "iss": "http://127.0.0.1:18080/realms/r013",
+        "aud": "repo-r",
+        "sub": "1022d8f7-00e1-4e20-835e-35e7a16e6aef",
+        "typ": "Bearer",
+        "azp": "agent-a2",
+        "sid": "Qlc6XBfpcqPxnOZJ6aEJ7cwe",
+        "scope": "repo:push profile",
+        "name": "Alice Human",
+        "preferred_username": "alice",
+        "given_name": "Alice",
+        "family_name": "Human"
+      }
+    }
+  },
+  {
+    "id": "K3",
+    "act_present": false,
+    "azp": "agent-a2"
+  },
+  {
+    "id": "K2-resource",
+    "noAud": {
+      "accepted": true,
+      "logged": {
+        "sub": "1022d8f7-00e1-4e20-835e-35e7a16e6aef",
+        "preferred_username": "alice",
+        "azp": "agent-a2",
+        "act": null
+      }
+    },
+    "audCheck": {
+      "accepted": true,
+      "logged": {
+        "sub": "1022d8f7-00e1-4e20-835e-35e7a16e6aef",
+        "preferred_username": "alice",
+        "azp": "agent-a2",
+        "act": null
+      }
+    }
+  },
+  {
+    "id": "K4",
+    "result": {
+      "accepted": true,
+      "logged": {
+        "preferred_username": "alice",
+        "azp": "agent-a1",
+        "act": null
+      }
+    }
+  },
+  {
+    "id": "K5",
+    "result": {
+      "accepted": false,
+      "reason": "aud undefined"
+    }
+  }
+]

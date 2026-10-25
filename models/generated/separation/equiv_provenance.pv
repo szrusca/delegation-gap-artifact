@@ -1,0 +1,71 @@
+free c: channel.
+free agentview: channel [private].
+
+type skey.
+type pkey.
+
+fun pk(skey): pkey.
+fun sign(bitstring, skey): bitstring.
+reduc forall m: bitstring, k: skey; checksign(sign(m, k), pk(k)) = m.
+fun h(bitstring): bitstring.
+
+const root, del, req, capt, hole, prov, accepted: bitstring [data].
+const push, any, tracker: bitstring [data].
+free repoX, repoY: bitstring.
+free H, A1, A2, R: bitstring.
+
+event Accept(bitstring, bitstring).
+
+let Human(skH: skey, skT: skey) =
+  new tid: bitstring;
+  let d1 = (root, H, A1, (push, any), tid) in
+  let cap = (capt, H, tid, (hole, push, tracker)) in
+  out(c, (d1, sign(d1, skH)));
+  out(c, (cap, sign(cap, skH)));
+  let p = (prov, tracker, tid, choice[repoY, repoX]) in
+  out(c, (p, sign(p, skT)));
+  out(agentview, (tid, choice[repoY, repoX])).
+
+let Agent1(pkH: pkey, skA1: skey) =
+  in(c, (d1: bitstring, s1: bitstring));
+  if checksign(s1, pkH) = d1 then
+  let (=root, xh: bitstring, =A1, c1: bitstring, tid: bitstring) = d1 in
+  in(c, (child: bitstring, c2: bitstring));
+  let d2 = (del, A1, child, c2, h((d1, s1))) in
+  out(c, (d2, sign(d2, skA1))).
+
+let Agent2(pkH: pkey, pkA1: pkey, skA2: skey) =
+  in(c, (d1: bitstring, s1: bitstring, d2: bitstring, s2: bitstring));
+  if checksign(s1, pkH) = d1 then
+  if checksign(s2, pkA1) = d2 then
+  let (=root, xh: bitstring, xa1: bitstring, c1: bitstring, tid: bitstring) = d1 in
+  let (=del, =xa1, =A2, c2: bitstring, =h((d1, s1))) = d2 in
+  in(agentview, (=tid, observed: bitstring));
+  in(c, (r: bitstring, a: bitstring));
+  out(c, (req, a, d1, s1, d2, s2, sign((req, a, r, h((d1, s1, d2, s2))), skA2))).
+
+let Resource(pkH: pkey, pkA1: pkey, pkA2: pkey, pkT: pkey) =
+  in(c, (=req, a: bitstring, d1: bitstring, s1: bitstring, d2: bitstring, s2: bitstring, sr: bitstring));
+  if checksign(s1, pkH) = d1 then
+  if checksign(s2, pkA1) = d2 then
+  if checksign(sr, pkA2) = (req, a, R, h((d1, s1, d2, s2))) then
+  let (=root, =H, xa1: bitstring, (=push, =any), tid: bitstring) = d1 in
+  let (=del, =xa1, =A2, c2: bitstring, =h((d1, s1))) = d2 in
+  let (=push, v: bitstring) = a in
+  in(c, (cap: bitstring, sc: bitstring));
+  if checksign(sc, pkH) = cap then
+  let (=capt, =H, =tid, (=hole, =push, src: bitstring)) = cap in
+  in(c, (p: bitstring, sp: bitstring));
+  if checksign(sp, pkT) = p then
+  let (=prov, =src, =tid, =v) = p in
+  if src = tracker then
+  event Accept(a, tid);
+  out(c, (accepted, a, tid)).
+
+process
+  new skH: skey; new skA1: skey; new skA2: skey; new skT: skey;
+  out(c, (pk(skH), pk(skA1), pk(skA2), pk(skT)));
+  ( (!Human(skH, skT))
+  | (!Agent1(pk(skH), skA1))
+  | (!Agent2(pk(skH), pk(skA1), skA2))
+  | (!Resource(pk(skH), pk(skA1), pk(skA2), pk(skT))) )

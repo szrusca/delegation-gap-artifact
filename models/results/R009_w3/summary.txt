@@ -1,0 +1,16 @@
+subpop C rc=124 
+spec_min I rc=124 
+didpreauth C rc=124 
+didpreauth S rc=124 
+subpop_didpreauth S rc=124 
+didpreauth c rc=124 
+didpreauth I rc=124 
+subpop_didpreauth C rc=124 
+subpop I rc=124 
+spec_min C rc=124 
+spec_min c rc=124 
+subpop S rc=124 
+subpop_didpreauth c rc=124 
+subpop c rc=124 
+spec_min S rc=124 
+subpop_didpreauth I rc=124 

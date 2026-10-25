@@ -1,0 +1,1098 @@
+maude tool: 'maude'
+ checking version: 3.5.1. OK.
+ checking installation: OK.
+[Theory OBO_dpop_client_actbind] Theory loaded
+[Theory OBO_dpop_client_actbind] Theory translated
+[Theory OBO_dpop_client_actbind] Theory closed
+[Saturating Sources] Step 1 (Max 5)
+[Saturating Sources] Done
+theory OBO_dpop_client_actbind
+
+begin
+
+// Function signature and definition of the equational theory E
+
+functions: fst/1, h/1, pair/2, pk/1, sign/2, snd/1, true/0, verify/3
+equations:
+    fst(<x.1, x.2>) = x.1,
+    snd(<x.1, x.2>) = x.2,
+    verify(sign(x.1, x.2), x.1, pk(x.2)) = true
+
+restriction Equality:
+  "∀ x y #i. (Eq( x, y ) @ #i) ⇒ (x = y)"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ x y #i. (Eq( x, y ) @ #i) ⇒ (x = y)"
+  */
+
+restriction CaveatPermits:
+  "∀ c a #i.
+    (Check( c, a ) @ #i) ⇒
+    ((c = a) ∨ (∃ op x. (a = <op, x>) ∧ (c = <op, 'any'>)))"
+
+  /*
+  expanded formula:
+  "∀ c a #i.
+    (Check( c, a ) @ #i) ⇒
+    ((c = a) ∨ (∃ op x. (a = <op, x>) ∧ (c = <op, 'any'>)))"
+  */
+
+restriction ConcreteOperand:
+  "∀ op #i. (Act( <op, 'any'> ) @ #i) ⇒ (⊥)"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ op #i. (Act( <op, 'any'> ) @ #i) ⇒ (⊥)"
+  */
+
+restriction UniqueKey:
+  "∀ X #i #j. ((Register( X ) @ #i) ∧ (Register( X ) @ #j)) ⇒ (#i = #j)"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ X #i #j. ((Register( X ) @ #i) ∧ (Register( X ) @ #j)) ⇒ (#i = #j)"
+  */
+
+restriction OneValuePerSourceAndTask:
+  "∀ s t v w #i #j.
+    ((Produced( s, t, v ) @ #i) ∧ (Produced( s, t, w ) @ #j)) ⇒ (#i = #j)"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ s t v w #i #j.
+    ((Produced( s, t, v ) @ #i) ∧ (Produced( s, t, w ) @ #j)) ⇒ (#i = #j)"
+  */
+
+restriction HumanTaskOperandIsConcrete:
+  "∀ H t op #i. (Intends( H, t, <'fixed', op, 'any'> ) @ #i) ⇒ (⊥)"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ H t op #i. (Intends( H, t, <'fixed', op, 'any'> ) @ #i) ⇒ (⊥)"
+  */
+
+rule (modulo E) Register:
+   [ Fr( ~k ) ]
+  --[ Register( $X ) ]->
+   [ !Ltk( $X, ~k ), !Pk( $X, pk(~k) ), Out( pk(~k) ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Actor_joins_flow:
+   [ In( tid ), !Ltk( 'AS', kAS ), !Ltk( $Y, kY ) ]
+  --[ ActorJoined( $Y, tid ) ]->
+   [
+   Out( <<'actor', $Y>, sign(<'actor', $Y>, kAS), 
+         sign(<'join', $Y, tid>, kY)>
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Human_consents_static:
+   [ Fr( ~tid ), !Ltk( $H, kH ) ]
+  --[
+  Consent( $H, $K, $Y, <'push', 'any'>, ~tid ),
+  Intends( $H, ~tid, <'fixed', 'push', $repo> ), TaskStatic( ~tid )
+  ]->
+   [
+   CodeState( ~tid, $H, $K, $Y, <'push', 'any'> ),
+   Out( <'code', ~tid, $K, $Y> )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Human_consents_dynamic:
+   [ Fr( ~tid ), !Ltk( $H, kH ) ]
+  --[
+  Consent( $H, $K, $Y, <'push', 'any'>, ~tid ),
+  Intends( $H, ~tid, <'hole', 'push', $Src> ), TaskDynamic( ~tid )
+  ]->
+   [
+   CodeState( ~tid, $H, $K, $Y, <'push', 'any'> ),
+   Out( <'code', ~tid, $K, $Y> ), !TaskOpen( ~tid, $Src )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Source_produces:
+   [ !TaskOpen( tid, $Src ), !Ltk( $Src, ks ) ]
+  --[ Produced( $Src, tid, $v ) ]->
+   [ Out( <'prov', $Src, tid, $v> ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Client_redeems_with_own_key:
+   [ In( tid ), !Ltk( $K, kK ) ]
+  --[ ClientRedeemed( $K, tid ) ]->
+   [ Out( <pk(kK), sign(<'dpop-tok', tid>, kK)> ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) AS_token_endpoint:
+   [
+   In( <'tokreq', tid, <'actor', Y>, sa, js, cnfk, cp> ),
+   CodeState( tid, H, K, Y, s ), !Ltk( 'AS', kAS ), !Pk( Y, pkY )
+   ]
+  --[
+  Eq( verify(sa, <'actor', Y>, pk(kAS)), true ),
+  Eq( verify(js, <'join', Y, tid>, pkY), true ),
+  Eq( verify(cp, <'dpop-tok', tid>, cnfk), true ),
+  Issued( <'obo', H, K, Y, s, cnfk, tid> )
+  ]->
+   [
+   Out( <<'obo', H, K, Y, s, cnfk, tid>, 
+         sign(<'obo', H, K, Y, s, cnfk, tid>, kAS)>
+   )
+   ]
+
+  /*
+  rule (modulo AC) AS_token_endpoint:
+     [
+     In( <'tokreq', tid, <'actor', Y>, sa, js, cnfk, cp> ),
+     CodeState( tid, H, K, Y, s ), !Ltk( 'AS', kAS ), !Pk( Y, pkY )
+     ]
+    --[
+    Eq( z, true ), Eq( z.1, true ), Eq( z.2, true ),
+    Issued( <'obo', H, K, Y, s, cnfk, tid> )
+    ]->
+     [
+     Out( <<'obo', H, K, Y, s, cnfk, tid>, 
+           sign(<'obo', H, K, Y, s, cnfk, tid>, kAS)>
+     )
+     ]
+    variants (modulo AC)
+    1. Y     = Y.28
+       cnfk  = cnfk.29
+       cp    = cp.30
+       js    = js.31
+       kAS   = kAS.32
+       pkY   = pkY.33
+       sa    = sa.35
+       tid   = tid.36
+       z     = verify(sa.35, <'actor', Y.28>, pk(kAS.32))
+       z.1   = verify(js.31, <'join', Y.28, tid.36>, pkY.33)
+       z.2   = verify(cp.30, <'dpop-tok', tid.36>, cnfk.29)
+    
+    2. Y     = Y.28
+       cnfk  = cnfk.29
+       cp    = cp.30
+       js    = js.31
+       kAS   = kAS.32
+       pkY   = pkY.33
+       sa    = sign(<'actor', Y.28>, kAS.32)
+       tid   = tid.36
+       z     = true
+       z.1   = verify(js.31, <'join', Y.28, tid.36>, pkY.33)
+       z.2   = verify(cp.30, <'dpop-tok', tid.36>, cnfk.29)
+    
+    3. Y     = Y.68
+       cnfk  = pk(x.132)
+       cp    = sign(<'dpop-tok', tid.76>, x.132)
+       js    = js.71
+       kAS   = kAS.72
+       pkY   = pkY.73
+       sa    = sa.75
+       tid   = tid.76
+       z     = verify(sa.75, <'actor', Y.68>, pk(kAS.72))
+       z.1   = verify(js.71, <'join', Y.68, tid.76>, pkY.73)
+       z.2   = true
+    
+    4. Y     = Y.69
+       cnfk  = pk(x.134)
+       cp    = sign(<'dpop-tok', tid.77>, x.134)
+       js    = js.72
+       kAS   = kAS.73
+       pkY   = pkY.74
+       sa    = sign(<'actor', Y.69>, kAS.73)
+       tid   = tid.77
+       z     = true
+       z.1   = verify(js.72, <'join', Y.69, tid.77>, pkY.74)
+       z.2   = true
+    
+    5. Y     = Y.71
+       cnfk  = pk(x.136)
+       cp    = sign(<'dpop-tok', tid.79>, x.136)
+       js    = sign(<'join', Y.71, tid.79>, x.138)
+       kAS   = kAS.75
+       pkY   = pk(x.138)
+       sa    = sa.78
+       tid   = tid.79
+       z     = verify(sa.78, <'actor', Y.71>, pk(kAS.75))
+       z.1   = true
+       z.2   = true
+    
+    6. Y     = Y.71
+       cnfk  = pk(x.136)
+       cp    = sign(<'dpop-tok', tid.79>, x.136)
+       js    = sign(<'join', Y.71, tid.79>, x.138)
+       kAS   = kAS.75
+       pkY   = pk(x.138)
+       sa    = sign(<'actor', Y.71>, kAS.75)
+       tid   = tid.79
+       z     = true
+       z.1   = true
+       z.2   = true
+    
+    7. Y     = Y.72
+       cnfk  = cnfk.73
+       cp    = cp.74
+       js    = sign(<'join', Y.72, tid.80>, x.140)
+       kAS   = kAS.76
+       pkY   = pk(x.140)
+       sa    = sa.79
+       tid   = tid.80
+       z     = verify(sa.79, <'actor', Y.72>, pk(kAS.76))
+       z.1   = true
+       z.2   = verify(cp.74, <'dpop-tok', tid.80>, cnfk.73)
+    
+    8. Y     = Y.72
+       cnfk  = cnfk.73
+       cp    = cp.74
+       js    = sign(<'join', Y.72, tid.80>, x.140)
+       kAS   = kAS.76
+       pkY   = pk(x.140)
+       sa    = sign(<'actor', Y.72>, kAS.76)
+       tid   = tid.80
+       z     = true
+       z.1   = true
+       z.2   = verify(cp.74, <'dpop-tok', tid.80>, cnfk.73)
+  */
+
+rule (modulo E) Agent_sends_request:
+   [
+   In( <<'obo', H, K, Y, s, cnf, tid>, ts> ), In( <$R, a> ), !Ltk( $X, kX )
+   ]
+  --[ Request( $X, a, tid ) ]->
+   [
+   Out( <'req', a, $R, <'obo', H, K, Y, s, cnf, tid>, ts, 
+         sign(<'dpop', a, $R, h(<<'obo', H, K, Y, s, cnf, tid>, ts>)>, kX)>
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Resource_accepts:
+   [
+   In( <'req', a, $R, <'obo', H, K, Y, s, cnf, tid>, ts, pr> ),
+   !Pk( 'AS', pkYS )
+   ]
+  --[
+  Eq( verify(ts, <'obo', H, K, Y, s, cnf, tid>, pkYS), true ),
+  Check( s, a ), Act( a ),
+  Eq( verify(pr, <'dpop', a, $R, h(<<'obo', H, K, Y, s, cnf, tid>, ts>)>,
+             cnf),
+      true
+  ),
+  Accept( $R, H, K, Y, a, tid )
+  ]->
+   [ ]
+
+  /*
+  rule (modulo AC) Resource_accepts:
+     [
+     In( <'req', a, $R, <'obo', H, K, Y, s, cnf, tid>, ts, pr> ),
+     !Pk( 'AS', pkYS )
+     ]
+    --[
+    Eq( z, true ), Check( s, a ), Act( a ), Eq( z.1, true ),
+    Accept( $R, H, K, Y, a, tid )
+    ]->
+     [ ]
+    variants (modulo AC)
+    1. $R    = $R.28
+       H     = H.29
+       K     = K.30
+       Y     = Y.31
+       a     = a.32
+       cnf   = cnf.33
+       pkYS  = pkYS.34
+       pr    = pr.35
+       s     = s.36
+       tid   = tid.37
+       ts    = ts.38
+       z     = verify(ts.38, <'obo', H.29, K.30, Y.31, s.36, cnf.33, tid.37>,
+                      pkYS.34)
+       z.1   = verify(pr.35,
+                      <'dpop', a.32, $R.28, 
+                       h(<<'obo', H.29, K.30, Y.31, s.36, cnf.33, tid.37>, ts.38>)>,
+                      cnf.33)
+    
+    2. $R    = $R.55
+       H     = H.56
+       K     = K.57
+       Y     = Y.58
+       a     = a.59
+       cnf   = cnf.60
+       pkYS  = pk(x.108)
+       pr    = pr.62
+       s     = s.63
+       tid   = tid.64
+       ts    = sign(<'obo', H.56, K.57, Y.58, s.63, cnf.60, tid.64>, x.108)
+       z     = true
+       z.1   = verify(pr.62,
+                      <'dpop', a.59, $R.55, 
+                       h(<<'obo', H.56, K.57, Y.58, s.63, cnf.60, tid.64>, 
+                          sign(<'obo', H.56, K.57, Y.58, s.63, cnf.60, tid.64>, x.108)>)
+                      >,
+                      cnf.60)
+    
+    3. $R    = $R.55
+       H     = H.56
+       K     = K.57
+       Y     = Y.58
+       a     = a.59
+       cnf   = pk(x.108)
+       pkYS  = pkYS.61
+       pr    = sign(<'dpop', a.59, $R.55, 
+                     h(<<'obo', H.56, K.57, Y.58, s.63, pk(x.108), tid.64>, ts.65>)>,
+                    x.108)
+       s     = s.63
+       tid   = tid.64
+       ts    = ts.65
+       z     = verify(ts.65, <'obo', H.56, K.57, Y.58, s.63, pk(x.108), tid.64>,
+                      pkYS.61)
+       z.1   = true
+    
+    4. $R    = $R.56
+       H     = H.57
+       K     = K.58
+       Y     = Y.59
+       a     = a.60
+       cnf   = pk(x.109)
+       pkYS  = pk(x.110)
+       pr    = sign(<'dpop', a.60, $R.56, 
+                     h(<<'obo', H.57, K.58, Y.59, s.64, pk(x.109), tid.65>, 
+                        sign(<'obo', H.57, K.58, Y.59, s.64, pk(x.109), tid.65>, x.110)>)
+                    >,
+                    x.109)
+       s     = s.64
+       tid   = tid.65
+       ts    = sign(<'obo', H.57, K.58, Y.59, s.64, pk(x.109), tid.65>, x.110)
+       z     = true
+       z.1   = true
+  */
+
+lemma executable_static_task_conformant:
+  exists-trace
+  "∃ R H K Y a tid #i #j #k #q.
+    ((((Accept( R, H, K, Y, a, tid ) @ #i) ∧ (TaskStatic( tid ) @ #j)) ∧
+      (Intends( H, tid, <'fixed', a> ) @ #k)) ∧
+     (Request( Y, a, tid ) @ #q)) ∧
+    (¬(K = Y))"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ R H K Y a tid #i #j #k #q.
+  (Accept( R, H, K, Y, a, tid ) @ #i) ∧
+  (TaskStatic( tid ) @ #j) ∧
+  (Intends( H, tid, <'fixed', a> ) @ #k) ∧
+  (Request( Y, a, tid ) @ #q)
+ ∧
+  ¬(K = Y)"
+*/
+simplify
+solve( (s = a)  ∥ (∃ op x. (a = <op, x>) ∧ (s = <op, 'any'>)) )
+  case case_2
+  solve( !Pk( 'AS', pk(x.2) ) ▶₁ #i )
+    case Register
+    solve( !Ltk( $H.1, kH ) ▶₁ #j )
+      case Register
+      solve( !Ltk( $X, kX ) ▶₂ #q )
+        case Register
+        solve( Intends( H, ~tid, <'fixed', op, x> ) @ #k.3 )
+          case Human_consents_static
+          solve( !KU( sign(<'obo', $H, K, $X, <'push', 'any'>, pk(x), ~tid>, ~k)
+                 ) @ #vk.29 )
+            case AS_token_endpoint
+            solve( !KU( sign(<'dpop', <'push', $repo>, $R, 
+                              h(<<'obo', $H, $K, $X, <'push', 'any'>, pk(x), ~tid>, 
+                                 sign(<'obo', $H, $K, $X, <'push', 'any'>, pk(x), ~tid>, ~k)>)
+                             >,
+                             x)
+                   ) @ #vk.33 )
+              case Agent_sends_request
+              solve( !KU( sign(<'actor', $X>, ~k.1) ) @ #vk.52 )
+                case Actor_joins_flow
+                solve( !KU( sign(<'join', $X, ~tid>, ~k.3) ) @ #vk.53 )
+                  case Actor_joins_flow
+                  solve( !KU( sign(<'dpop-tok', ~tid>, ~k) ) @ #vk.54 )
+                    case Client_redeems_with_own_key
+                    solve( !KU( ~tid ) @ #vk.37 )
+                      case Human_consents_static
+                      solve( !KU( pk(~k) ) @ #vk.37 )
+                        case Client_redeems_with_own_key
+                        SOLVED // trace found
+                      qed
+                    qed
+                  qed
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma executable_dynamic_task_conformant:
+  exists-trace
+  "∃ R H K Y op v S tid #i #k #l #q.
+    ((((Accept( R, H, K, Y, <op, v>, tid ) @ #i) ∧
+       (Intends( H, tid, <'hole', op, S> ) @ #k)) ∧
+      (Produced( S, tid, v ) @ #l)) ∧
+     (Request( Y, <op, v>, tid ) @ #q)) ∧
+    (¬(K = Y))"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ R H K Y op v S tid #i #k #l #q.
+  (Accept( R, H, K, Y, <op, v>, tid ) @ #i) ∧
+  (Intends( H, tid, <'hole', op, S> ) @ #k) ∧
+  (Produced( S, tid, v ) @ #l) ∧
+  (Request( Y, <op, v>, tid ) @ #q)
+ ∧
+  ¬(K = Y)"
+*/
+simplify
+solve( (s = <op, $v>)  ∥
+       (∃ op.1 x. (<op, $v> = <op.1, x>) ∧ (s = <op.1, 'any'>)) )
+  case case_2
+  solve( !Pk( 'AS', pk(x.1) ) ▶₁ #i )
+    case Register
+    solve( !TaskOpen( tid, $Src ) ▶₀ #l )
+      case Human_consents_dynamic
+      solve( !Ltk( $Src, ks ) ▶₁ #l )
+        case Register
+        solve( !Ltk( $X, kX ) ▶₂ #q )
+          case Register
+          solve( Intends( H, ~tid, <'hole', op, $Src> ) @ #k.4 )
+            case Human_consents_dynamic
+            solve( !KU( sign(<'obo', $H, K, $X, <'push', 'any'>, pk(x), ~tid>, ~k)
+                   ) @ #vk.29 )
+              case AS_token_endpoint
+              solve( !KU( sign(<'dpop', <'push', $v>, $R, 
+                                h(<<'obo', $H, $K, $X, <'push', 'any'>, pk(x), ~tid>, 
+                                   sign(<'obo', $H, $K, $X, <'push', 'any'>, pk(x), ~tid>, ~k)>)
+                               >,
+                               x)
+                     ) @ #vk.33 )
+                case Agent_sends_request
+                solve( !KU( sign(<'actor', $X>, ~k.1) ) @ #vk.52 )
+                  case Actor_joins_flow
+                  solve( !KU( sign(<'join', $X, ~tid>, ~k.3) ) @ #vk.53 )
+                    case Actor_joins_flow
+                    solve( !KU( sign(<'dpop-tok', ~tid>, ~k) ) @ #vk.54 )
+                      case Client_redeems_with_own_key
+                      solve( !KU( ~tid ) @ #vk.37 )
+                        case Human_consents_dynamic
+                        solve( !KU( pk(~k) ) @ #vk.37 )
+                          case Client_redeems_with_own_key
+                          SOLVED // trace found
+                        qed
+                      qed
+                    qed
+                  qed
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma witness_client_acts_logged_as_actor:
+  exists-trace
+  "∃ R H K Y a tid #i #q.
+    (((Accept( R, H, K, Y, a, tid ) @ #i) ∧ (Request( K, a, tid ) @ #q)) ∧
+     (¬(K = Y))) ∧
+    (¬(∃ #p. Request( Y, a, tid ) @ #p))"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ R H K Y a tid #i #q.
+  (Accept( R, H, K, Y, a, tid ) @ #i) ∧ (Request( K, a, tid ) @ #q)
+ ∧
+  (¬(K = Y)) ∧ (∀ #p. (Request( Y, a, tid ) @ #p) ⇒ ⊥)"
+*/
+simplify
+solve( (s = a)  ∥ (∃ op x. (a = <op, x>) ∧ (s = <op, 'any'>)) )
+  case case_2
+  solve( !Pk( 'AS', pk(x.2) ) ▶₁ #i )
+    case Register
+    solve( !Ltk( $X, kX ) ▶₂ #q )
+      case Register
+      solve( !KU( sign(<'obo', H, $X, Y, <op, 'any'>, pk(x.1), tid>, ~k)
+             ) @ #vk.28 )
+        case AS_token_endpoint_case_1
+        solve( !KU( sign(<'dpop', <'push', x>, $R, 
+                          h(<<'obo', $H, $X, $Y, <'push', 'any'>, pk(x.1), ~tid>, 
+                             sign(<'obo', $H, $X, $Y, <'push', 'any'>, pk(x.1), ~tid>, ~k)>)
+                         >,
+                         x.1)
+               ) @ #vk.33 )
+          case Agent_sends_request
+          solve( !KU( sign(<'actor', $Y>, ~k.1) ) @ #vk.52 )
+            case Actor_joins_flow
+            solve( !KU( sign(<'join', $Y, ~tid>, ~k.3) ) @ #vk.53 )
+              case Actor_joins_flow
+              solve( !KU( sign(<'dpop-tok', ~tid>, ~k) ) @ #vk.54 )
+                case Client_redeems_with_own_key
+                solve( !KU( ~tid ) @ #vk.37 )
+                  case Human_consents_static
+                  solve( !KU( pk(~k) ) @ #vk.37 )
+                    case Client_redeems_with_own_key
+                    SOLVED // trace found
+                  qed
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma witness_actor_named_without_participation:
+  exists-trace
+  "∃ R H K Y a tid #i.
+    (Accept( R, H, K, Y, a, tid ) @ #i) ∧
+    (¬(∃ #j. ActorJoined( Y, tid ) @ #j))"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ R H K Y a tid #i.
+  (Accept( R, H, K, Y, a, tid ) @ #i)
+ ∧
+  ∀ #j. (ActorJoined( Y, tid ) @ #j) ⇒ ⊥"
+*/
+simplify
+solve( (s = a)  ∥ (∃ op x. (a = <op, x>) ∧ (s = <op, 'any'>)) )
+  case case_1
+  solve( !Pk( 'AS', pk(x.1) ) ▶₁ #i )
+    case Register
+    solve( !KU( sign(<'obo', H, K, Y, a, pk(x), tid>, ~k) ) @ #vk.20 )
+      case AS_token_endpoint_case_1
+      by contradiction /* from formulas */
+    next
+      case AS_token_endpoint_case_2
+      by contradiction /* from formulas */
+    next
+      case c_sign
+      by solve( !KU( ~k ) @ #vk.22 )
+    qed
+  qed
+next
+  case case_2
+  solve( !Pk( 'AS', pk(x.2) ) ▶₁ #i )
+    case Register
+    solve( !KU( sign(<'obo', H, K, Y, <op, 'any'>, pk(x.1), tid>, ~k)
+           ) @ #vk.21 )
+      case AS_token_endpoint_case_1
+      solve( !KU( sign(<'dpop', <'push', x>, $R, 
+                        h(<<'obo', $H, $K, $Y, <'push', 'any'>, pk(x.1), ~tid>, 
+                           sign(<'obo', $H, $K, $Y, <'push', 'any'>, pk(x.1), ~tid>, ~k)>)
+                       >,
+                       x.1)
+             ) @ #vk.25 )
+        case Agent_sends_request
+        solve( !KU( sign(<'actor', $Y>, ~k.1) ) @ #vk.37 )
+          case Actor_joins_flow
+          solve( !KU( sign(<'join', $Y, ~tid>, ~k.2) ) @ #vk.38 )
+            case Actor_joins_flow
+            by contradiction /* from formulas */
+          next
+            case c_sign
+            by solve( !KU( ~k.2 ) @ #vk.43 )
+          qed
+        next
+          case c_sign
+          by solve( !KU( ~k.1 ) @ #vk.40 )
+        qed
+      next
+        case c_sign
+        solve( !KU( h(<<'obo', $H, $K, $Y, <'push', 'any'>, pk(x.1), ~tid>, 
+                       sign(<'obo', $H, $K, $Y, <'push', 'any'>, pk(x.1), ~tid>, ~k)>)
+               ) @ #vk.43 )
+          case c_h
+          solve( !KU( sign(<'actor', $Y>, ~k) ) @ #vk.40 )
+            case Actor_joins_flow
+            solve( !KU( sign(<'join', $Y, ~tid>, ~k.1) ) @ #vk.41 )
+              case Actor_joins_flow
+              by contradiction /* from formulas */
+            next
+              case c_sign
+              by solve( !KU( ~k.1 ) @ #vk.48 )
+            qed
+          next
+            case c_sign
+            by solve( !KU( ~k ) @ #vk.45 )
+          qed
+        qed
+      qed
+    next
+      case AS_token_endpoint_case_2
+      solve( !KU( sign(<'dpop', <'push', x>, $R, 
+                        h(<<'obo', $H, $K, $Y, <'push', 'any'>, pk(x.1), ~tid>, 
+                           sign(<'obo', $H, $K, $Y, <'push', 'any'>, pk(x.1), ~tid>, ~k)>)
+                       >,
+                       x.1)
+             ) @ #vk.25 )
+        case Agent_sends_request
+        solve( !KU( sign(<'actor', $Y>, ~k.1) ) @ #vk.37 )
+          case Actor_joins_flow
+          solve( !KU( sign(<'join', $Y, ~tid>, ~k.2) ) @ #vk.38 )
+            case Actor_joins_flow
+            by contradiction /* from formulas */
+          next
+            case c_sign
+            by solve( !KU( ~k.2 ) @ #vk.43 )
+          qed
+        next
+          case c_sign
+          by solve( !KU( ~k.1 ) @ #vk.40 )
+        qed
+      next
+        case c_sign
+        solve( !KU( h(<<'obo', $H, $K, $Y, <'push', 'any'>, pk(x.1), ~tid>, 
+                       sign(<'obo', $H, $K, $Y, <'push', 'any'>, pk(x.1), ~tid>, ~k)>)
+               ) @ #vk.43 )
+          case c_h
+          solve( !KU( sign(<'actor', $Y>, ~k) ) @ #vk.40 )
+            case Actor_joins_flow
+            solve( !KU( sign(<'join', $Y, ~tid>, ~k.1) ) @ #vk.41 )
+              case Actor_joins_flow
+              by contradiction /* from formulas */
+            next
+              case c_sign
+              by solve( !KU( ~k.1 ) @ #vk.48 )
+            qed
+          next
+            case c_sign
+            by solve( !KU( ~k ) @ #vk.45 )
+          qed
+        qed
+      qed
+    next
+      case c_sign
+      by solve( !KU( ~k ) @ #vk.26 )
+    qed
+  qed
+qed
+
+lemma AUTH_consent_names_client_and_actor:
+  all-traces
+  "∀ R H K Y a tid #i.
+    (Accept( R, H, K, Y, a, tid ) @ #i) ⇒
+    (∃ s #j. (Consent( H, K, Y, s, tid ) @ #j) ∧ (#j < #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ R H K Y a tid #i.
+  (Accept( R, H, K, Y, a, tid ) @ #i)
+ ∧
+  ∀ s #j. (Consent( H, K, Y, s, tid ) @ #j) ⇒ ¬(#j < #i)"
+*/
+simplify
+solve( (s = a)  ∥ (∃ op x. (a = <op, x>) ∧ (s = <op, 'any'>)) )
+  case case_1
+  solve( !Pk( 'AS', pk(x.1) ) ▶₁ #i )
+    case Register
+    solve( !KU( sign(<'obo', H, K, Y, a, pk(x), tid>, ~k) ) @ #vk.20 )
+      case AS_token_endpoint_case_1
+      by contradiction /* from formulas */
+    next
+      case AS_token_endpoint_case_2
+      by contradiction /* from formulas */
+    next
+      case c_sign
+      by solve( !KU( ~k ) @ #vk.22 )
+    qed
+  qed
+next
+  case case_2
+  solve( !Pk( 'AS', pk(x.2) ) ▶₁ #i )
+    case Register
+    solve( !KU( sign(<'obo', H, K, Y, <op, 'any'>, pk(x.1), tid>, ~k)
+           ) @ #vk.21 )
+      case AS_token_endpoint_case_1
+      by contradiction /* from formulas */
+    next
+      case AS_token_endpoint_case_2
+      by contradiction /* from formulas */
+    next
+      case c_sign
+      by solve( !KU( ~k ) @ #vk.26 )
+    qed
+  qed
+qed
+
+lemma PARTICIPATION_actor_joined_this_delegation:
+  all-traces
+  "∀ R H K Y a tid #i.
+    (Accept( R, H, K, Y, a, tid ) @ #i) ⇒
+    (∃ #j. (ActorJoined( Y, tid ) @ #j) ∧ (#j < #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ R H K Y a tid #i.
+  (Accept( R, H, K, Y, a, tid ) @ #i)
+ ∧
+  ∀ #j. (ActorJoined( Y, tid ) @ #j) ⇒ ¬(#j < #i)"
+*/
+simplify
+solve( (s = a)  ∥ (∃ op x. (a = <op, x>) ∧ (s = <op, 'any'>)) )
+  case case_1
+  solve( !Pk( 'AS', pk(x.1) ) ▶₁ #i )
+    case Register
+    solve( !KU( sign(<'obo', H, K, Y, a, pk(x), tid>, ~k) ) @ #vk.20 )
+      case AS_token_endpoint_case_1
+      by contradiction /* from formulas */
+    next
+      case AS_token_endpoint_case_2
+      by contradiction /* from formulas */
+    next
+      case c_sign
+      by solve( !KU( ~k ) @ #vk.22 )
+    qed
+  qed
+next
+  case case_2
+  solve( !Pk( 'AS', pk(x.2) ) ▶₁ #i )
+    case Register
+    solve( !KU( sign(<'obo', H, K, Y, <op, 'any'>, pk(x.1), tid>, ~k)
+           ) @ #vk.21 )
+      case AS_token_endpoint_case_1
+      solve( !KU( sign(<'dpop', <'push', x>, $R, 
+                        h(<<'obo', $H, $K, $Y, <'push', 'any'>, pk(x.1), ~tid>, 
+                           sign(<'obo', $H, $K, $Y, <'push', 'any'>, pk(x.1), ~tid>, ~k)>)
+                       >,
+                       x.1)
+             ) @ #vk.25 )
+        case Agent_sends_request
+        solve( !KU( sign(<'actor', $Y>, ~k.1) ) @ #vk.37 )
+          case Actor_joins_flow
+          solve( !KU( sign(<'join', $Y, ~tid>, ~k.2) ) @ #vk.38 )
+            case Actor_joins_flow
+            by contradiction /* from formulas */
+          next
+            case c_sign
+            by solve( !KU( ~k.2 ) @ #vk.43 )
+          qed
+        next
+          case c_sign
+          by solve( !KU( ~k.1 ) @ #vk.40 )
+        qed
+      next
+        case c_sign
+        solve( !KU( h(<<'obo', $H, $K, $Y, <'push', 'any'>, pk(x.1), ~tid>, 
+                       sign(<'obo', $H, $K, $Y, <'push', 'any'>, pk(x.1), ~tid>, ~k)>)
+               ) @ #vk.43 )
+          case c_h
+          solve( !KU( sign(<'actor', $Y>, ~k) ) @ #vk.40 )
+            case Actor_joins_flow
+            solve( !KU( sign(<'join', $Y, ~tid>, ~k.1) ) @ #vk.41 )
+              case Actor_joins_flow
+              by contradiction /* from formulas */
+            next
+              case c_sign
+              by solve( !KU( ~k.1 ) @ #vk.48 )
+            qed
+          next
+            case c_sign
+            by solve( !KU( ~k ) @ #vk.45 )
+          qed
+        qed
+      qed
+    next
+      case AS_token_endpoint_case_2
+      solve( !KU( sign(<'dpop', <'push', x>, $R, 
+                        h(<<'obo', $H, $K, $Y, <'push', 'any'>, pk(x.1), ~tid>, 
+                           sign(<'obo', $H, $K, $Y, <'push', 'any'>, pk(x.1), ~tid>, ~k)>)
+                       >,
+                       x.1)
+             ) @ #vk.25 )
+        case Agent_sends_request
+        solve( !KU( sign(<'actor', $Y>, ~k.1) ) @ #vk.37 )
+          case Actor_joins_flow
+          solve( !KU( sign(<'join', $Y, ~tid>, ~k.2) ) @ #vk.38 )
+            case Actor_joins_flow
+            by contradiction /* from formulas */
+          next
+            case c_sign
+            by solve( !KU( ~k.2 ) @ #vk.43 )
+          qed
+        next
+          case c_sign
+          by solve( !KU( ~k.1 ) @ #vk.40 )
+        qed
+      next
+        case c_sign
+        solve( !KU( h(<<'obo', $H, $K, $Y, <'push', 'any'>, pk(x.1), ~tid>, 
+                       sign(<'obo', $H, $K, $Y, <'push', 'any'>, pk(x.1), ~tid>, ~k)>)
+               ) @ #vk.43 )
+          case c_h
+          solve( !KU( sign(<'actor', $Y>, ~k) ) @ #vk.40 )
+            case Actor_joins_flow
+            solve( !KU( sign(<'join', $Y, ~tid>, ~k.1) ) @ #vk.41 )
+              case Actor_joins_flow
+              by contradiction /* from formulas */
+            next
+              case c_sign
+              by solve( !KU( ~k.1 ) @ #vk.48 )
+            qed
+          next
+            case c_sign
+            by solve( !KU( ~k ) @ #vk.45 )
+          qed
+        qed
+      qed
+    next
+      case c_sign
+      by solve( !KU( ~k ) @ #vk.26 )
+    qed
+  qed
+qed
+
+lemma NOESC_action_within_consent:
+  all-traces
+  "∀ R H K Y a tid #i.
+    (Accept( R, H, K, Y, a, tid ) @ #i) ⇒
+    (∃ s #j.
+      (Consent( H, K, Y, s, tid ) @ #j) ∧
+      ((s = a) ∨ (∃ op x. (a = <op, x>) ∧ (s = <op, 'any'>))))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ R H K Y a tid #i.
+  (Accept( R, H, K, Y, a, tid ) @ #i)
+ ∧
+  ∀ s #j.
+   (Consent( H, K, Y, s, tid ) @ #j)
+  ⇒
+   (¬(s = a)) ∧ (∀ op x. (a = <op, x>) ∧ (s = <op, 'any'>) ⇒ ⊥)"
+*/
+simplify
+solve( (s = a)  ∥ (∃ op x. (a = <op, x>) ∧ (s = <op, 'any'>)) )
+  case case_1
+  solve( !Pk( 'AS', pk(x.1) ) ▶₁ #i )
+    case Register
+    solve( !KU( sign(<'obo', H, K, Y, a, pk(x), tid>, ~k) ) @ #vk.20 )
+      case AS_token_endpoint_case_1
+      by contradiction /* from formulas */
+    next
+      case AS_token_endpoint_case_2
+      by contradiction /* from formulas */
+    next
+      case c_sign
+      by solve( !KU( ~k ) @ #vk.22 )
+    qed
+  qed
+next
+  case case_2
+  solve( !Pk( 'AS', pk(x.2) ) ▶₁ #i )
+    case Register
+    solve( !KU( sign(<'obo', H, K, Y, <op, 'any'>, pk(x.1), tid>, ~k)
+           ) @ #vk.21 )
+      case AS_token_endpoint_case_1
+      by contradiction /* from formulas */
+    next
+      case AS_token_endpoint_case_2
+      by contradiction /* from formulas */
+    next
+      case c_sign
+      by solve( !KU( ~k ) @ #vk.26 )
+    qed
+  qed
+qed
+
+lemma ATTR_actor_logged_actor_decided_request:
+  all-traces
+  "∀ R H K Y a tid #i.
+    (Accept( R, H, K, Y, a, tid ) @ #i) ⇒
+    (∃ #j. (Request( Y, a, tid ) @ #j) ∧ (#j < #i))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ R H K Y a tid #i.
+  (Accept( R, H, K, Y, a, tid ) @ #i)
+ ∧
+  ∀ #j. (Request( Y, a, tid ) @ #j) ⇒ ¬(#j < #i)"
+*/
+simplify
+solve( (s = a)  ∥ (∃ op x. (a = <op, x>) ∧ (s = <op, 'any'>)) )
+  case case_2
+  solve( !Pk( 'AS', pk(x.2) ) ▶₁ #i )
+    case Register
+    solve( !KU( sign(<'obo', H, K, Y, <op, 'any'>, pk(x.1), tid>, ~k)
+           ) @ #vk.21 )
+      case AS_token_endpoint_case_1
+      solve( !KU( sign(<'dpop', <'push', x>, $R, 
+                        h(<<'obo', $H, $K, $Y, <'push', 'any'>, pk(x.1), ~tid>, 
+                           sign(<'obo', $H, $K, $Y, <'push', 'any'>, pk(x.1), ~tid>, ~k)>)
+                       >,
+                       x.1)
+             ) @ #vk.25 )
+        case Agent_sends_request
+        solve( !KU( sign(<'actor', $Y>, ~k.1) ) @ #vk.37 )
+          case Actor_joins_flow
+          solve( !KU( sign(<'join', $Y, ~tid>, ~k.2) ) @ #vk.38 )
+            case Actor_joins_flow
+            solve( !KU( sign(<'dpop-tok', ~tid>, ~k) ) @ #vk.39 )
+              case Client_redeems_with_own_key
+              solve( !KU( ~tid ) @ #vk.34 )
+                case Human_consents_static
+                solve( !KU( pk(~k) ) @ #vk.34 )
+                  case Client_redeems_with_own_key
+                  SOLVED // trace found
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma TASK_static_task:
+  all-traces
+  "∀ R H K Y a tid #i #j.
+    ((Accept( R, H, K, Y, a, tid ) @ #i) ∧ (TaskStatic( tid ) @ #j)) ⇒
+    (∃ #k. Intends( H, tid, <'fixed', a> ) @ #k)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ R H K Y a tid #i #j.
+  (Accept( R, H, K, Y, a, tid ) @ #i) ∧ (TaskStatic( tid ) @ #j)
+ ∧
+  ∀ #k. (Intends( H, tid, <'fixed', a> ) @ #k) ⇒ ⊥"
+*/
+simplify
+solve( (s = a)  ∥ (∃ op x. (a = <op, x>) ∧ (s = <op, 'any'>)) )
+  case case_2
+  solve( !Pk( 'AS', pk(x.2) ) ▶₁ #i )
+    case Register
+    solve( !Ltk( $H.1, kH ) ▶₁ #j )
+      case Register
+      solve( !KU( sign(<'obo', H, K, Y, <op, 'any'>, pk(x.1), ~tid>, ~k)
+             ) @ #vk.21 )
+        case AS_token_endpoint
+        solve( !KU( sign(<'dpop', <'push', x>, $R, 
+                          h(<<'obo', $H, $K, $Y, <'push', 'any'>, pk(x.1), ~tid>, 
+                             sign(<'obo', $H, $K, $Y, <'push', 'any'>, pk(x.1), ~tid>, ~k)>)
+                         >,
+                         x.1)
+               ) @ #vk.25 )
+          case Agent_sends_request
+          solve( !KU( sign(<'actor', $Y>, ~k.1) ) @ #vk.37 )
+            case Actor_joins_flow
+            solve( !KU( sign(<'join', $Y, ~tid>, ~k.3) ) @ #vk.38 )
+              case Actor_joins_flow
+              solve( !KU( sign(<'dpop-tok', ~tid>, ~k) ) @ #vk.39 )
+                case Client_redeems_with_own_key
+                solve( !KU( ~tid ) @ #vk.34 )
+                  case Human_consents_static
+                  solve( !KU( pk(~k) ) @ #vk.34 )
+                    case Client_redeems_with_own_key
+                    SOLVED // trace found
+                  qed
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma TASK_dynamic_task:
+  all-traces
+  "∀ R H K Y op v tid #i #j.
+    ((Accept( R, H, K, Y, <op, v>, tid ) @ #i) ∧ (TaskDynamic( tid ) @ #j)) ⇒
+    (∃ S #k #l.
+      (Intends( H, tid, <'hole', op, S> ) @ #k) ∧
+      (Produced( S, tid, v ) @ #l))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ R H K Y op v tid #i #j.
+  (Accept( R, H, K, Y, <op, v>, tid ) @ #i) ∧ (TaskDynamic( tid ) @ #j)
+ ∧
+  ∀ S #k #l.
+   (Intends( H, tid, <'hole', op, S> ) @ #k) ∧ (Produced( S, tid, v ) @ #l)
+  ⇒
+   ⊥"
+*/
+simplify
+solve( (s = <op, v>)  ∥
+       (∃ op.1 x. (<op, v> = <op.1, x>) ∧ (s = <op.1, 'any'>)) )
+  case case_2
+  solve( !Pk( 'AS', pk(x.1) ) ▶₁ #i )
+    case Register
+    solve( !Ltk( $H.1, kH ) ▶₁ #j )
+      case Register
+      solve( !KU( sign(<'obo', H, K, Y, <op, 'any'>, pk(x), ~tid>, ~k)
+             ) @ #vk.21 )
+        case AS_token_endpoint
+        solve( !KU( sign(<'dpop', <'push', v>, $R, 
+                          h(<<'obo', $H, $K, $Y, <'push', 'any'>, pk(x), ~tid>, 
+                             sign(<'obo', $H, $K, $Y, <'push', 'any'>, pk(x), ~tid>, ~k)>)
+                         >,
+                         x)
+               ) @ #vk.25 )
+          case Agent_sends_request
+          solve( !KU( sign(<'actor', $Y>, ~k.1) ) @ #vk.37 )
+            case Actor_joins_flow
+            solve( !KU( sign(<'join', $Y, ~tid>, ~k.3) ) @ #vk.38 )
+              case Actor_joins_flow
+              solve( !KU( sign(<'dpop-tok', ~tid>, ~k) ) @ #vk.39 )
+                case Client_redeems_with_own_key
+                solve( !KU( ~tid ) @ #vk.34 )
+                  case Human_consents_dynamic
+                  solve( !KU( pk(~k) ) @ #vk.34 )
+                    case Client_redeems_with_own_key
+                    SOLVED // trace found
+                  qed
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+qed
+
+/* All wellformedness checks were successful. */
+
+/*
+Generated from:
+Tamarin version 1.12.0
+Maude version 3.5.1
+Git revision: 82780bbaf3328a45f624ddb41e51bf75425f851c (with uncommited changes), branch: master
+Compiled at: 2026-03-07 14:22:39.174278293 UTC
+*/
+
+end
+
+==============================================================================
+summary of summaries:
+
+analyzed: generated/obo/OBO_dpop_client_actbind.spthy
+
+  processing time: 4.49s
+  
+  executable_static_task_conformant (exists-trace): verified (14 steps)
+  executable_dynamic_task_conformant (exists-trace): verified (15 steps)
+  witness_client_acts_logged_as_actor (exists-trace): verified (12 steps)
+  witness_actor_named_without_participation (exists-trace): falsified - no trace found (34 steps)
+  AUTH_consent_names_client_and_actor (all-traces): verified (12 steps)
+  PARTICIPATION_actor_joined_this_delegation (all-traces): verified (34 steps)
+  NOESC_action_within_consent (all-traces): verified (12 steps)
+  ATTR_actor_logged_actor_decided_request (all-traces): falsified - found trace (11 steps)
+  TASK_static_task (all-traces): falsified - found trace (12 steps)
+  TASK_dynamic_task (all-traces): falsified - found trace (12 steps)
+
+==============================================================================

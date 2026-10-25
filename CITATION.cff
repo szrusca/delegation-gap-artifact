@@ -1,0 +1,19 @@
+cff-version: 1.2.0
+message: "If you use this artifact, please cite it as below."
+title: "Artifact for: The Delegation-Authorization Gap in Multi-Hop AI-Agent Chains: A Formal Foundation and Protocol Analysis"
+version: "1.0"
+date-released: "2026-10-25"
+authors:
+  - family-names: "Song"
+    given-names: "Zhouran"
+    email: "songzhouran@gmail.com"
+    affiliation: "Independent researcher"
+license: ["MIT", "CC-BY-4.0"]
+keywords:
+  - AI agents
+  - delegation
+  - authorization
+  - OAuth
+  - Model Context Protocol
+  - Tamarin
+  - ProVerif

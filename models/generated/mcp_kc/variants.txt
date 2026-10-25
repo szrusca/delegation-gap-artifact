@@ -1,0 +1,7 @@
+kc_spec
+kc_spec_must
+kc_noaud
+kc_noaud_noscope
+kc_opscope
+kc_xchg
+kc_xchg_dpop
